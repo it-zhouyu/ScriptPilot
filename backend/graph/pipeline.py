@@ -1,5 +1,9 @@
 import json
+import logging
+import time
 from typing import AsyncGenerator
+
+logger = logging.getLogger("scriptpilot")
 
 from langgraph.graph import StateGraph, START, END
 
@@ -33,7 +37,7 @@ def build_graph():
     return graph.compile()
 
 
-async def run_pipeline_streaming(topic: str) -> AsyncGenerator[str, None]:
+async def run_pipeline_streaming(topic: str) -> AsyncGenerator[dict, None]:
     state: dict = {
         "topic": topic,
         "research": "",
@@ -43,16 +47,26 @@ async def run_pipeline_streaming(topic: str) -> AsyncGenerator[str, None]:
         "current_stage": "",
     }
 
+    logger.info("Pipeline started | topic: %s", topic)
+
     for stage_name in STAGES:
-        yield f"event: stage\ndata: {json.dumps({'stage': stage_name, 'status': 'running'})}\n\n"
+        start = time.time()
+        logger.info("[%s] started", stage_name)
+        yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}
 
         full_text = ""
-        async for token in STREAM_FNS[stage_name](state):
-            full_text += token
-            yield f"event: token\ndata: {json.dumps({'stage': stage_name, 'token': token})}\n\n"
+        async for item_type, text in STREAM_FNS[stage_name](state):
+            if item_type == "thinking":
+                yield {"event": "thinking", "data": json.dumps({"stage": stage_name, "token": text})}
+            else:
+                full_text += text
+                yield {"event": "token", "data": json.dumps({"stage": stage_name, "token": text})}
 
         state[stage_name] = full_text
 
-        yield f"event: stage\ndata: {json.dumps({'stage': stage_name, 'status': 'completed'})}\n\n"
+        elapsed = time.time() - start
+        logger.info("[%s] completed | %.1fs | %d chars", stage_name, elapsed, len(full_text))
+        yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
 
-    yield f"event: done\ndata: {json.dumps(state)}\n\n"
+    logger.info("Pipeline completed | total stages: %d", len(STAGES))
+    yield {"event": "done", "data": json.dumps(state)}

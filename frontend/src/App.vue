@@ -8,7 +8,7 @@
     <TopicInput :loading="loading" @generate="handleGenerate" ref="topicInput" />
 
     <div v-if="hasStarted" class="mt-6">
-      <ContentPanel :stageData="stageData" :activeStage="currentStage" ref="contentPanel" />
+      <ContentPanel :stageData="stageData" :thinkingData="thinkingData" :activeStage="currentStage" ref="contentPanel" />
     </div>
   </div>
 </template>
@@ -28,6 +28,12 @@ const stageData = reactive({
   content: '',
   script: '',
 })
+const thinkingData = reactive({
+  research: '',
+  outline: '',
+  content: '',
+  script: '',
+})
 
 const topicInput = ref(null)
 const contentPanel = ref(null)
@@ -37,6 +43,7 @@ async function handleGenerate(topic) {
   hasStarted.value = true
   currentStage.value = ''
   Object.keys(stageData).forEach(k => stageData[k] = '')
+  Object.keys(thinkingData).forEach(k => thinkingData[k] = '')
 
   if (contentPanel.value) contentPanel.value.reset()
 
@@ -48,6 +55,9 @@ async function handleGenerate(topic) {
     },
     onToken(data) {
       stageData[data.stage] += data.token
+    },
+    onThinking(data) {
+      thinkingData[data.stage] += data.token
     },
     onDone() {
       loading.value = false

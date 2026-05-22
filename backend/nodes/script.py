@@ -1,5 +1,6 @@
 from backend.config import get_llm
 from backend.graph.state import PipelineState
+from backend.nodes.utils import stream_chain
 from backend.prompts.script import script_prompt
 
 
@@ -11,6 +12,5 @@ def script_node(state: PipelineState) -> dict:
 
 async def stream_script(state: PipelineState):
     chain = script_prompt | get_llm()
-    async for chunk in chain.astream({"content": state["content"]}):
-        if chunk.content:
-            yield chunk.content
+    async for item in stream_chain(chain, {"content": state["content"]}):
+        yield item

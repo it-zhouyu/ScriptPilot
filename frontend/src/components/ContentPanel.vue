@@ -18,10 +18,20 @@
       </button>
     </div>
     <div class="p-6 min-h-[400px] max-h-[600px] overflow-y-auto">
-      <div v-if="!tabs.find(t => t.key === activeTab)?.content" class="text-gray-400 text-center py-12">
+      <!-- Thinking section (collapsible) -->
+      <div v-if="activeThinking" class="mb-4">
+        <button @click="thinkingOpen = !thinkingOpen" class="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-700 font-medium mb-2">
+          <span :class="thinkingOpen ? 'rotate-90' : ''" class="transition-transform inline-block">&#9654;</span>
+          AI 思考过程
+        </button>
+        <div v-if="thinkingOpen" class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 leading-relaxed whitespace-pre-wrap font-sans max-h-[200px] overflow-y-auto">{{ activeThinking }}</div>
+      </div>
+
+      <!-- Content -->
+      <div v-if="!activeContent" class="text-gray-400 text-center py-12">
         {{ activeStage === activeTab ? '正在生成...' : '等待生成...' }}
       </div>
-      <pre v-else class="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed font-sans">{{ tabs.find(t => t.key === activeTab)?.content }}</pre>
+      <pre v-else class="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed font-sans">{{ activeContent }}</pre>
     </div>
   </div>
 </template>
@@ -31,10 +41,12 @@ import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   stageData: { type: Object, required: true },
+  thinkingData: { type: Object, default: () => ({}) },
   activeStage: { type: String, default: '' },
 })
 
 const activeTab = ref('research')
+const thinkingOpen = ref(true)
 
 const STAGES = [
   { key: 'research', label: '资料收集' },
@@ -52,12 +64,16 @@ const tabs = computed(() =>
   }))
 )
 
+const activeContent = computed(() => props.stageData[activeTab.value] || '')
+const activeThinking = computed(() => props.thinkingData[activeTab.value] || '')
+
 watch(() => props.activeStage, (stage) => {
   if (stage) activeTab.value = stage
 })
 
 function reset() {
   activeTab.value = 'research'
+  thinkingOpen.value = true
 }
 
 defineExpose({ reset })

@@ -5,10 +5,20 @@
  * @param {object} handlers - Event callbacks
  * @param {(data: object) => void} handlers.onStage - Stage start/complete
  * @param {(data: object) => void} handlers.onToken - Token received
+ * @param {(data: object) => void} handlers.onThinking - Thinking token received
  * @param {(data: object) => void} handlers.onDone - Pipeline complete
  * @param {(error: Error) => void} handlers.onError - Error occurred
  */
-export async function fetchSSE(url, body, { onStage, onToken, onDone, onError }) {
+export async function fetchSSE(url, body, { onStage, onToken, onThinking, onDone, onError }) {
+  function dispatchEvent(currentEvent, line) {
+    if (!line.startsWith('data: ')) return
+    const data = JSON.parse(line.slice(6))
+    if (currentEvent === 'stage' && onStage) onStage(data)
+    else if (currentEvent === 'token' && onToken) onToken(data)
+    else if (currentEvent === 'thinking' && onThinking) onThinking(data)
+    else if (currentEvent === 'done' && onDone) onDone(data)
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -36,15 +46,27 @@ export async function fetchSSE(url, body, { onStage, onToken, onDone, onError })
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6))
-          if (currentEvent === 'stage' && onStage) onStage(data)
-          else if (currentEvent === 'token' && onToken) onToken(data)
-          else if (currentEvent === 'done' && onDone) onDone(data)
+        } else {
+          dispatchEvent(currentEvent, line)
+        }
+      }
+    }
+
+    // Process any remaining buffer after stream closes
+    if (buffer.trim()) {
+      let currentEvent = ''
+      for (const line of buffer.split('\n')) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else {
+          dispatchEvent(currentEvent, line)
         }
       }
     }
   } catch (err) {
     if (onError) onError(err)
+  } finally {
+    // Ensure UI resets even if done event was missed
+    if (onDone) onDone({})
   }
 }
