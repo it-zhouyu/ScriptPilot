@@ -4,13 +4,10 @@ from backend.nodes.utils import stream_chain
 from backend.prompts.outline import outline_prompt
 
 
-def outline_node(state: PipelineState) -> dict:
-    chain = outline_prompt | get_llm()
-    response = chain.invoke({"research": state["research"]})
-    return {"outline": response.content, "current_stage": "outline"}
-
-
 async def stream_outline(state: PipelineState):
     chain = outline_prompt | get_llm()
-    async for item in stream_chain(chain, {"research": state["research"]}):
+    async for item in stream_chain(chain, {
+        "research": state["research"],
+        "direction": state.get("direction", ""),
+    }):
         yield item

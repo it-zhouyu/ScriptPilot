@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 
 load_dotenv()
 
@@ -9,9 +9,10 @@ _api_key = os.getenv("DEEPSEEK_API_KEY", "")
 
 
 def get_llm():
-    return ChatOpenAI(
-        model="deepseek-v4-flash",
-        base_url="https://api.deepseek.com",
+    return ChatDeepSeek(
+        model="deepseek-v4-pro",
         api_key=_api_key,
         streaming=True,
+        reasoning_effort="high",
+        extra_body={"thinking": {"type": "enabled"}},
     )

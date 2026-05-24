@@ -3,15 +3,13 @@ import logging
 import time
 from typing import AsyncGenerator
 
+from backend.nodes.clarify import stream_clarify
+from backend.nodes.research import stream_research
+from backend.nodes.outline import stream_outline
+from backend.nodes.content import stream_content
+from backend.nodes.script import stream_script
+
 logger = logging.getLogger("scriptpilot")
-
-from langgraph.graph import StateGraph, START, END
-
-from backend.graph.state import PipelineState
-from backend.nodes.research import research_node, stream_research
-from backend.nodes.outline import outline_node, stream_outline
-from backend.nodes.content import content_node, stream_content
-from backend.nodes.script import script_node, stream_script
 
 STAGES = ["research", "outline", "content", "script"]
 
@@ -23,23 +21,16 @@ STREAM_FNS = {
 }
 
 
-def build_graph():
-    graph = StateGraph(PipelineState)
-    graph.add_node("research", research_node)
-    graph.add_node("outline", outline_node)
-    graph.add_node("content", content_node)
-    graph.add_node("script", script_node)
-    graph.add_edge(START, "research")
-    graph.add_edge("research", "outline")
-    graph.add_edge("outline", "content")
-    graph.add_edge("content", "script")
-    graph.add_edge("script", END)
-    return graph.compile()
+async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
+    async for event in stream_clarify(topic):
+        yield event
 
 
-async def run_pipeline_streaming(topic: str) -> AsyncGenerator[dict, None]:
+async def run_pipeline_streaming(topic: str, direction: str = "") -> AsyncGenerator[dict, None]:
     state: dict = {
         "topic": topic,
+        "direction": direction,
+        "clarify": "",
         "research": "",
         "outline": "",
         "content": "",
@@ -47,7 +38,7 @@ async def run_pipeline_streaming(topic: str) -> AsyncGenerator[dict, None]:
         "current_stage": "",
     }
 
-    logger.info("Pipeline started | topic: %s", topic)
+    logger.info("Pipeline started | topic: %s | direction: %s", topic, direction or "(none)")
 
     for stage_name in STAGES:
         start = time.time()
