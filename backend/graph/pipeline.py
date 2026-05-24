@@ -30,7 +30,6 @@ async def run_pipeline_streaming(topic: str, direction: str = "") -> AsyncGenera
     state: dict = {
         "topic": topic,
         "direction": direction,
-        "clarify": "",
         "research": "",
         "outline": "",
         "content": "",

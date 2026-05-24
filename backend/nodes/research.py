@@ -1,5 +1,6 @@
 import logging
 import os
+from html import escape
 
 from tavily import TavilyClient
 
@@ -9,9 +10,10 @@ logger = logging.getLogger("scriptpilot")
 
 
 def _format_result(idx: int, r: dict) -> str:
-    title = r.get("title", "无标题")
-    content = r.get("content", "")
+    title = escape(r.get("title", "无标题"))
+    content = escape(r.get("content", ""))
     url = r.get("url", "")
+    safe_url = escape(url, quote=True)
     return (
         f'<div class="search-card">'
         f'<div class="search-card-header">'
@@ -19,7 +21,7 @@ def _format_result(idx: int, r: dict) -> str:
         f'<span class="search-card-title">{title}</span>'
         f'</div>'
         f'<p class="search-card-content">{content}</p>'
-        f'<a class="search-card-url" href="{url}" target="_blank">{url}</a>'
+        f'<a class="search-card-url" href="{safe_url}" target="_blank">{escape(url)}</a>'
         f'</div>'
     )
 
