@@ -5,7 +5,7 @@
       <p class="text-gray-500">AI 口播稿生成器 — 输入主题，自动生成口播稿</p>
     </header>
 
-    <TopicInput :loading="loading" @generate="handleClarify" ref="topicInput" />
+    <TopicInput :loading="loading || clarifyLoading" @generate="handleClarify" ref="topicInput" />
 
     <!-- Phase 1: Direction options -->
     <div v-if="phase === 'clarify'" class="mt-6">
