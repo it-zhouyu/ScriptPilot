@@ -1,129 +1,725 @@
-<template>
-  <div class="max-w-4xl mx-auto px-4 py-8">
-    <header class="text-center mb-8">
-      <h1 class="text-3xl font-bold text-gray-900 mb-2">ScriptPilot</h1>
-      <p class="text-gray-500">AI 口播稿生成器 — 输入主题，自动生成口播稿</p>
-    </header>
-
-    <TopicInput :loading="loading || clarifyLoading" @generate="handleClarify" ref="topicInput" />
-
-    <!-- Phase 1: Direction options -->
-    <div v-if="phase === 'clarify'" class="mt-6">
-      <div v-if="clarifyLoading" class="text-center py-12 text-gray-400">
-        <span class="inline-block w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2 align-middle"></span>
-        正在分析主题方向...
-      </div>
-      <div v-else-if="options.length" class="space-y-4">
-        <p class="text-gray-600 text-sm">{{ analysis }}</p>
-        <h3 class="text-lg font-semibold text-gray-800">请选择创作方向：</h3>
-        <div v-for="opt in options" :key="opt.id"
-          @click="handleSelectDirection(opt)"
-          class="direction-card group cursor-pointer border border-gray-200 rounded-xl p-5 hover:border-blue-400 hover:shadow-md transition-all"
-        >
-          <div class="flex items-start gap-4">
-            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">{{ opt.id }}</span>
-            <div class="flex-1">
-              <h4 class="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{{ opt.title }}</h4>
-              <p class="text-gray-500 text-sm mt-1">{{ opt.description }}</p>
-              <span class="inline-block mt-2 text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ opt.audience }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Phase 2: Pipeline content -->
-    <div v-if="hasStarted" class="mt-6">
-      <ContentPanel :stageData="stageData" :thinkingData="thinkingData" :activeStage="currentStage" ref="contentPanel" />
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, nextTick, watch } from 'vue'
 import TopicInput from './components/TopicInput.vue'
-import ContentPanel from './components/ContentPanel.vue'
+import StageContent from './components/StageContent.vue'
 import { fetchSSE } from './api/sse.js'
+import { marked } from 'marked'
 
-const loading = ref(false)
-const phase = ref('')          // '' | 'clarify' | 'generate'
-const clarifyLoading = ref(false)
+// ── State ──────────────────────────────────────────────
+const phase = ref('input')
+// phases: 'input' | 'analyzing' | 'select-direction' | 'researching' | 'generating' | 'error' | 'done'
+
+const topic = ref('')
+const analyzeThinking = ref('')
 const analysis = ref('')
 const options = ref([])
-const selectedDirection = ref('')
-const hasStarted = ref(false)
-const currentStage = ref('')
-const stageData = reactive({ research: '', outline: '', content: '', script: '' })
-const thinkingData = reactive({ research: '', outline: '', content: '', script: '' })
+const selectedDirection = ref(null)
+const currentStage = ref(null)
+const activeView = ref('direction') // 'direction' | stage keys
+const userNavigated = ref(false)
+const errorMessage = ref('')
+const pendingDirection = ref(null)
 
-const topicInput = ref(null)
-const contentPanel = ref(null)
-let currentTopic = ''
+const clarifyContent = ref('')
 
-function resetState() {
-  phase.value = ''
-  clarifyLoading.value = false
-  analysis.value = ''
-  options.value = []
-  selectedDirection.value = ''
-  hasStarted.value = false
-  currentStage.value = ''
-  Object.keys(stageData).forEach(k => stageData[k] = '')
-  Object.keys(thinkingData).forEach(k => thinkingData[k] = '')
+const researchResults = ref([])
+const selectedResearch = ref(new Set())
+const researchConfirmed = ref(false)
+const activeResearchIndex = ref(null)
+const analyzeThinkingEl = ref(null)
+
+const stages = reactive({
+  research:  { status: 'waiting', content: '', thinking: '' },
+  outline:   { status: 'waiting', content: '', thinking: '' },
+  content:   { status: 'waiting', content: '', thinking: '' },
+  script:    { status: 'waiting', content: '', thinking: '' },
+})
+
+watch(analyzeThinking, () => {
+  if (analyzeThinkingEl.value) {
+    nextTick(() => {
+      analyzeThinkingEl.value.scrollTop = analyzeThinkingEl.value.scrollHeight
+    })
+  }
+})
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  const cleaned = text
+    .replace(/```json[\s\S]*?```/g, '')
+    .replace(/```[\s\S]*$/g, '')
+    .trim()
+  const html = marked.parse(cleaned, { breaks: true })
+  return html.replace(/<p>\s*<\/p>/g, '').replace(/<pre><code>\s*<\/code><\/pre>/g, '')
 }
 
-async function handleClarify(topic) {
-  resetState()
-  currentTopic = topic
-  phase.value = 'clarify'
-  clarifyLoading.value = true
+const stageOrder = ['research', 'outline', 'content', 'script']
+const stageMeta = {
+  research:  { label: '资料收集',   icon: 'search' },
+  outline:   { label: '文章大纲',   icon: 'list' },
+  content:   { label: '正文撰写',   icon: 'edit' },
+  script:    { label: '口播稿转换', icon: 'mic' },
+}
 
-  await fetchSSE('/api/clarify', { topic }, {
+// ── Sidebar nav items ──────────────────────────────────
+const navItems = computed(() => {
+  const items = [
+    { key: 'direction', label: '创作方向', icon: 'compass', status: getDirectionStatus() },
+  ]
+  stageOrder.forEach(key => {
+    items.push({ key, label: stageMeta[key].label, icon: stageMeta[key].icon, status: stages[key].status })
+  })
+  return items
+})
+
+function getDirectionStatus() {
+  if (phase.value === 'error') return 'error'
+  if (selectedDirection.value) return 'completed'
+  if (phase.value === 'analyzing') return 'running'
+  return 'waiting'
+}
+
+function isItemViewable(key) {
+  if (key === 'direction') return options.value.length > 0
+  if (key === 'research') return researchResults.value.length > 0 || stages.research.status === 'running' || researchConfirmed.value
+  return stages[key].content !== '' || stages[key].thinking !== '' || stages[key].status === 'running'
+}
+
+function handleNavClick(key) {
+  if (!isItemViewable(key)) return
+  userNavigated.value = true
+  activeView.value = key
+  if (key === 'research') researchConfirmed.value = false
+}
+
+// Auto-switch to running stage
+watch(currentStage, (stage) => {
+  if (stage && !userNavigated.value) {
+    activeView.value = stage
+  }
+})
+
+// Reset user navigation flag after 8s
+let navTimeout = null
+watch(activeView, () => {
+  if (userNavigated.value) {
+    clearTimeout(navTimeout)
+    navTimeout = setTimeout(() => { userNavigated.value = false }, 8000)
+  }
+})
+
+// ── Scroll ─────────────────────────────────────────────
+const scrollContainer = ref(null)
+const scrollToBottom = async () => {
+  await nextTick()
+  const el = scrollContainer.value
+  if (!el) return
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+}
+
+// Auto-scroll when content changes for active running stage
+watch(() => {
+  if (!currentStage.value) return ''
+  return stages[currentStage.value]?.content?.length ?? 0
+}, () => {
+  if (activeView.value === currentStage.value) scrollToBottom()
+})
+
+// ── Handlers ───────────────────────────────────────────
+async function handleTopicSubmit(text) {
+  topic.value = text
+  phase.value = 'analyzing'
+  activeView.value = 'direction'
+  userNavigated.value = false
+  analyzeThinking.value = ''
+  clarifyContent.value = ''
+  errorMessage.value = ''
+
+  await fetchSSE('/api/clarify', { topic: text }, {
+    onThinking(data) {
+      analyzeThinking.value += data.thinking || data.token || ''
+    },
+    onToken(data) {
+      clarifyContent.value += data.token || ''
+    },
     onOptions(data) {
-      analysis.value = data.analysis || ''
+      analysis.value = clarifyContent.value || ''
       options.value = data.options || []
     },
     onDone() {
-      clarifyLoading.value = false
+      phase.value = 'select-direction'
     },
     onError(err) {
       console.error('Clarify error:', err)
-      clarifyLoading.value = false
+      const msg = typeof err === 'string' ? err : err?.message || String(err)
+      if (msg.includes('503') || msg.includes('busy')) {
+        errorMessage.value = 'AI 服务当前繁忙，请稍后再试。'
+      } else if (msg.includes('502') || msg.includes('network')) {
+        errorMessage.value = '网络连接失败，请检查后端服务是否启动。'
+      } else {
+        errorMessage.value = '分析失败，请重试或换个主题。'
+      }
+      phase.value = 'error'
     },
   })
 }
 
-async function handleSelectDirection(opt) {
-  selectedDirection.value = opt.title + '：' + opt.description
-  phase.value = 'generate'
-  loading.value = true
-  hasStarted.value = true
-  currentStage.value = ''
-  Object.keys(stageData).forEach(k => stageData[k] = '')
-  Object.keys(thinkingData).forEach(k => thinkingData[k] = '')
+async function handleDirectionSelect(opt) {
+  selectedDirection.value = opt
+  pendingDirection.value = null
+  phase.value = 'researching'
+  currentStage.value = 'research'
+  activeView.value = 'research'
+  userNavigated.value = false
+  researchConfirmed.value = false
+  researchResults.value = []
+  selectedResearch.value = new Set()
+  activeResearchIndex.value = null
 
-  if (contentPanel.value) contentPanel.value.reset()
+  // Reset pipeline stages
+  stages.research = { status: 'running', content: '', thinking: '' }
+  stages.outline = { status: 'waiting', content: '', thinking: '' }
+  stages.content = { status: 'waiting', content: '', thinking: '' }
+  stages.script = { status: 'waiting', content: '', thinking: '' }
 
-  const directionText = `${currentTopic} — ${opt.title}（${opt.description}）`
+  const directionText = `${topic.value} — ${opt.title}`
 
-  await fetchSSE('/api/generate', { topic: currentTopic, direction: directionText }, {
+  await fetchSSE('/api/research', { topic: topic.value, direction: directionText }, {
     onStage(data) {
-      if (data.status === 'running') currentStage.value = data.stage
+      if (data.stage === 'research') {
+        stages.research.status = data.status === 'completed' ? 'completed' : 'running'
+      }
     },
-    onToken(data) {
-      stageData[data.stage] += data.token
-    },
-    onThinking(data) {
-      thinkingData[data.stage] += data.token
-    },
-    onDone() {
-      loading.value = false
-      currentStage.value = ''
+    onResults(data) {
+      researchResults.value = data.results || []
+      selectedResearch.value = new Set(data.results.map((_, i) => i))
     },
     onError(err) {
-      console.error('SSE error:', err)
-      loading.value = false
+      console.error('Research error:', err)
+      errorMessage.value = '资料收集失败，请重试。'
+      phase.value = 'error'
     },
   })
 }
+
+async function confirmResearch() {
+  if (selectedResearch.value.size === 0) return
+
+  // Build HTML from selected results
+  const htmlParts = ['<h2>搜索结果</h2>']
+  researchResults.value.forEach((r, i) => {
+    if (selectedResearch.value.has(i)) htmlParts.push(r.html)
+  })
+  const researchHtml = htmlParts.join('')
+  stages.research.content = researchHtml
+  researchConfirmed.value = true
+  phase.value = 'generating'
+  currentStage.value = null
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+
+  await fetchSSE('/api/generate', {
+    topic: topic.value,
+    direction: directionText,
+    research: researchHtml,
+  }, {
+    onStage(data) {
+      if (data.status === 'running') {
+        currentStage.value = data.stage
+        stages[data.stage].status = 'running'
+      } else if (data.status === 'completed') {
+        stages[data.stage].status = 'completed'
+      }
+    },
+    onToken(data) {
+      stages[data.stage].content += data.token
+    },
+    onThinking(data) {
+      stages[data.stage].thinking += data.thinking || data.token || ''
+    },
+    onDone() {
+      phase.value = 'done'
+    },
+    onError(err) {
+      console.error('Generate error:', err)
+      const msg = typeof err === 'string' ? err : err?.message || String(err)
+      errorMessage.value = msg.includes('503') || msg.includes('busy')
+        ? 'AI 服务当前繁忙，生成中断。'
+        : '生成过程中出错，请重试。'
+      phase.value = 'error'
+    },
+  })
+}
+
+function toggleResearchItem(index) {
+  const newSet = new Set(selectedResearch.value)
+  if (newSet.has(index)) newSet.delete(index)
+  else newSet.add(index)
+  selectedResearch.value = newSet
+}
+
+function toggleAllResearch() {
+  if (selectedResearch.value.size === researchResults.value.length) {
+    selectedResearch.value = new Set()
+  } else {
+    selectedResearch.value = new Set(researchResults.value.map((_, i) => i))
+  }
+}
+
+function reset() {
+  topic.value = ''
+  phase.value = 'input'
+  analysis.value = ''
+  options.value = []
+  selectedDirection.value = null
+  currentStage.value = null
+  activeView.value = 'direction'
+  userNavigated.value = false
+  analyzeThinking.value = ''
+  clarifyContent.value = ''
+  errorMessage.value = ''
+  pendingDirection.value = null
+  researchResults.value = []
+  selectedResearch.value = new Set()
+  researchConfirmed.value = false
+  activeResearchIndex.value = null
+  Object.keys(stages).forEach(k => {
+    stages[k] = { status: 'waiting', content: '', thinking: '' }
+  })
+}
+
+function selectDirection(opt) {
+  pendingDirection.value = opt
+}
+
+function confirmDirection() {
+  if (pendingDirection.value) {
+    handleDirectionSelect(pendingDirection.value)
+  }
+}
+
+function changeDirection() {
+  pendingDirection.value = null
+}
+
+function retry() {
+  if (selectedDirection.value) {
+    handleDirectionSelect(selectedDirection.value)
+  } else {
+    handleTopicSubmit(topic.value)
+  }
+}
+
+async function copyScript() {
+  const temp = document.createElement('div')
+  temp.innerHTML = stages.script.content
+  const text = temp.textContent || temp.innerText
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+}
 </script>
+
+<template>
+  <div class="min-h-screen bg-bg-base flex">
+    <!-- ═══ Sidebar ═══ -->
+    <aside
+      v-if="phase !== 'input'"
+      class="w-60 flex-shrink-0 bg-white border-r border-border-subtle flex flex-col h-screen sticky top-0"
+    >
+      <!-- Brand -->
+      <div class="px-5 pt-5 pb-4 border-b border-border-subtle">
+        <div class="flex items-center justify-between">
+          <h1 class="text-base font-bold text-fg tracking-tight">ScriptPilot</h1>
+          <button
+            @click="reset"
+            class="p-1.5 rounded-lg text-fg-dim hover:text-fg-secondary hover:bg-surface-hover transition-colors"
+            title="新主题"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
+        <p class="mt-2 text-xs text-fg-secondary leading-relaxed line-clamp-2">{{ topic }}</p>
+      </div>
+
+      <!-- Nav items -->
+      <nav class="flex-1 py-3 px-3 space-y-1 overflow-y-auto">
+        <button
+          v-for="item in navItems"
+          :key="item.key"
+          @click="handleNavClick(item.key)"
+          :disabled="!isItemViewable(item.key)"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 group"
+          :class="[
+            activeView === item.key
+              ? 'bg-accent/8 text-accent border border-accent/15'
+              : isItemViewable(item.key)
+                ? 'text-fg-secondary hover:bg-surface-hover hover:text-fg border border-transparent'
+                : 'text-fg-dim cursor-not-allowed border border-transparent',
+          ]"
+        >
+          <!-- Status indicator -->
+          <span
+            class="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center"
+            :class="{
+              'bg-green-500/10 text-green-600': item.status === 'completed',
+              'bg-accent/10 text-accent': item.status === 'running',
+              'bg-red-100 text-red-500': item.status === 'error',
+              'bg-surface text-fg-dim': item.status === 'waiting',
+            }"
+          >
+            <svg v-if="item.status === 'completed'" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <svg v-else-if="item.status === 'error'" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <svg v-else-if="item.status === 'running'" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span v-else class="w-1.5 h-1.5 rounded-full bg-fg-dim/50"></span>
+          </span>
+
+          <div class="min-w-0">
+            <span class="text-sm font-medium truncate block">{{ item.label }}</span>
+            <span v-if="item.status === 'running'" class="text-[11px] text-accent/70 block mt-0.5">
+              {{ item.key === 'research' ? '收集中...' : (stages[item.key]?.thinking && !stages[item.key]?.content ? '正在思考...' : '正在生成...') }}
+            </span>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Bottom: copy / retry -->
+      <div v-if="phase === 'error'" class="px-4 pb-4 pt-2 border-t border-red-100">
+        <button
+          @click="retry"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors active:scale-[0.98]"
+        >
+          重试
+        </button>
+      </div>
+      <div v-else-if="phase === 'done'" class="px-4 pb-4 pt-2 border-t border-border-subtle">
+        <button
+          @click="copyScript"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-colors active:scale-[0.98]"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          复制口播稿
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ Main Content ═══ -->
+    <!-- Phase: Initial Input -->
+    <main v-if="phase === 'input'" class="flex-1">
+      <TopicInput @submit="handleTopicSubmit" />
+    </main>
+
+    <!-- Phase: Sidebar + Content -->
+    <main v-else class="flex-1 h-screen overflow-y-auto" ref="scrollContainer">
+      <div :class="activeView === 'research' && !researchConfirmed
+        ? 'px-8 py-6 h-full flex flex-col'
+        : 'max-w-3xl mx-auto px-6 py-6'">
+
+        <!-- ── View: Direction ── -->
+        <template v-if="activeView === 'direction'">
+          <!-- Error state -->
+          <div v-if="phase === 'error'" class="animate-fade-in">
+            <div class="flex items-start gap-4 p-6 bg-red-50 border border-red-200 rounded-2xl">
+              <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-sm font-semibold text-red-800 mb-1">生成失败</h3>
+                <p class="text-sm text-red-600 leading-relaxed">{{ errorMessage }}</p>
+                <div class="flex gap-3 mt-4">
+                  <button
+                    @click="retry"
+                    class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors active:scale-95"
+                  >
+                    重试
+                  </button>
+                  <button
+                    @click="reset"
+                    class="px-4 py-2 bg-white text-red-600 text-sm font-medium rounded-lg border border-red-200 hover:bg-red-50 transition-colors"
+                  >
+                    换个主题
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analyzing state: thinking phase -->
+          <div v-if="phase === 'analyzing' && !clarifyContent" class="animate-fade-in flex items-center justify-center" style="height: calc(100vh - 120px)">
+            <div class="flex flex-col items-center w-full max-w-2xl">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="flex gap-1">
+                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                </div>
+                <span class="text-sm text-fg-secondary">思考中...</span>
+              </div>
+              <div ref="analyzeThinkingEl" class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ analyzeThinking }}</div>
+            </div>
+          </div>
+
+          <!-- Analyzing state: streaming LLM output -->
+          <div v-if="phase === 'analyzing' && clarifyContent" class="animate-fade-in">
+            <div class="prose-content text-sm text-fg-secondary" v-html="renderMarkdown(clarifyContent)"></div>
+          </div>
+
+          <!-- Direction selection -->
+          <div v-if="options.length > 0" class="animate-fade-in">
+            <div class="prose-content text-sm text-fg-secondary" v-html="renderMarkdown(analysis)"></div>
+
+            <!-- Already confirmed & generating -->
+            <div v-if="selectedDirection" class="mb-6">
+              <p class="text-xs text-fg-dim mb-3">已选择方向</p>
+              <div class="p-4 rounded-xl bg-accent/5 border border-accent/20">
+                <div class="flex items-center gap-3">
+                  <span class="flex-shrink-0 w-7 h-7 rounded-lg bg-accent text-white flex items-center justify-center text-xs font-bold">
+                    {{ selectedDirection.id }}
+                  </span>
+                  <h4 class="text-sm font-medium text-fg">{{ selectedDirection.title }}</h4>
+                </div>
+              </div>
+            </div>
+
+            <!-- Confirm pending selection -->
+            <div v-else-if="pendingDirection" class="animate-fade-in">
+              <p class="text-xs text-fg-dim mb-3">确认创作方向</p>
+              <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
+                <div class="flex items-center gap-3">
+                  <span class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center text-sm font-bold">
+                    {{ pendingDirection.id }}
+                  </span>
+                  <h4 class="text-base font-semibold text-fg">{{ pendingDirection.title }}</h4>
+                </div>
+              </div>
+              <div class="flex gap-3 mt-5">
+                <button
+                  @click="confirmDirection"
+                  class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all duration-200 active:scale-95"
+                >
+                  确认
+                </button>
+                <button
+                  @click="changeDirection"
+                  class="px-6 py-2.5 bg-white text-fg-secondary text-sm font-medium rounded-xl border border-border-subtle hover:border-border hover:text-fg transition-all duration-200"
+                >
+                  修改
+                </button>
+              </div>
+            </div>
+
+            <!-- Direction cards (selectable) -->
+            <template v-if="phase === 'select-direction' && !pendingDirection && !selectedDirection">
+              <p class="text-xs text-fg-dim mb-3">选择一个创作方向：</p>
+              <div class="space-y-2">
+                <button
+                  v-for="opt in options"
+                  :key="opt.id"
+                  @click="selectDirection(opt)"
+                  class="w-full text-left px-4 py-3 rounded-xl border border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group active:scale-[0.98]"
+                >
+                  <div class="flex items-center gap-3">
+                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold bg-accent/15 text-accent-light group-hover:bg-accent group-hover:text-white transition-colors">
+                      {{ opt.id }}
+                    </span>
+                    <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors">{{ opt.title }}</h4>
+                  </div>
+                </button>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- ── View: Pipeline Stage ── -->
+        <template v-else>
+          <!-- Error banner during pipeline -->
+          <div v-if="phase === 'error'" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 animate-fade-in">
+            <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <p class="text-sm text-red-600 flex-1">{{ errorMessage }}</p>
+            <button @click="retry" class="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors">重试</button>
+          </div>
+
+          <!-- Research selection view -->
+          <div v-if="activeView === 'research' && !researchConfirmed" class="animate-fade-in flex flex-col flex-1 min-h-0">
+            <!-- Loading state: same style as thinking in other stages -->
+            <div v-if="stages.research.status === 'running' && researchResults.length === 0" class="flex items-center justify-center" style="height: calc(100vh - 120px)">
+              <div class="flex flex-col items-center w-full max-w-2xl">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="flex gap-1">
+                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                  </div>
+                  <span class="text-sm text-fg-secondary">收集中...</span>
+                </div>
+                <div class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ stages.research.thinking }}</div>
+              </div>
+            </div>
+
+            <!-- Results header + split panel -->
+            <template v-if="researchResults.length > 0">
+              <div class="flex items-center justify-between flex-shrink-0 mb-4">
+                <p class="text-sm text-fg-secondary">
+                  已选 {{ selectedResearch.size }} / {{ researchResults.length }} 条
+                </p>
+                <button @click="toggleAllResearch" class="text-xs text-accent hover:underline">
+                  {{ selectedResearch.size === researchResults.length ? '取消全选' : '全选' }}
+                </button>
+              </div>
+
+              <!-- Split panel fills remaining space -->
+              <div class="flex gap-6 flex-1 min-h-0">
+                <!-- Left: title list -->
+                <div class="w-[380px] flex-shrink-0 flex flex-col border border-border-subtle rounded-2xl overflow-hidden bg-white">
+                  <div class="flex-1 overflow-y-auto px-2 py-1">
+                    <div
+                      v-for="(result, i) in researchResults"
+                      :key="i"
+                      @click="activeResearchIndex = i"
+                      class="flex items-start gap-3 px-4 py-3 cursor-pointer transition-all duration-150 rounded-xl my-0.5"
+                      :class="activeResearchIndex === i
+                        ? 'bg-accent/8'
+                        : 'hover:bg-surface-hover'"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="selectedResearch.has(i)"
+                        @click.stop="toggleResearchItem(i)"
+                        class="mt-1 w-4 h-4 rounded accent-accent cursor-pointer flex-shrink-0"
+                      />
+                      <div class="min-w-0 flex-1">
+                        <span class="text-[13px] text-fg leading-relaxed line-clamp-2">{{ result.title }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Confirm bar -->
+                  <div class="px-5 py-4 border-t border-border-subtle bg-white">
+                    <button
+                      @click="confirmResearch"
+                      :disabled="selectedResearch.size === 0"
+                      class="w-full px-4 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                    >
+                      确认（{{ selectedResearch.size }} 条）
+                    </button>
+                    <p class="text-xs text-fg-dim text-center mt-2">仅使用选中资料继续生成</p>
+                  </div>
+                </div>
+
+                <!-- Right: detail panel -->
+                <div class="flex-1 min-w-0 border border-border-subtle rounded-2xl overflow-y-auto bg-white">
+                  <template v-if="activeResearchIndex !== null && researchResults[activeResearchIndex]">
+                    <div class="p-6">
+                      <div class="flex items-start justify-between gap-3 mb-5">
+                        <h3 class="text-base font-semibold text-fg leading-snug">{{ researchResults[activeResearchIndex].title }}</h3>
+                        <span class="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-full flex-shrink-0">#{{ researchResults[activeResearchIndex].index }}</span>
+                      </div>
+                      <div class="text-sm text-fg-secondary leading-relaxed whitespace-pre-wrap mb-6">{{ researchResults[activeResearchIndex].content }}</div>
+                      <div class="pt-4 border-t border-border-subtle">
+                        <a
+                          :href="researchResults[activeResearchIndex].url"
+                          target="_blank"
+                          class="inline-flex items-center gap-2 text-sm text-accent hover:text-accent-light transition-colors"
+                        >
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          查看原始网页
+                        </a>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="flex flex-col items-center justify-center h-full text-fg-dim">
+                      <svg class="w-12 h-12 mb-3 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                      </svg>
+                      <p class="text-sm">点击左侧条目查看详情</p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Empty results -->
+            <div v-if="stages.research.status === 'completed' && researchResults.length === 0" class="text-center py-8">
+              <p class="text-sm text-fg-secondary mb-4">未找到相关资料</p>
+              <button @click="confirmResearch" class="px-4 py-2 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-colors">
+                直接继续
+              </button>
+            </div>
+          </div>
+
+          <!-- Regular pipeline stage view -->
+          <div v-else :key="activeView" class="animate-fade-in">
+            <StageContent
+              :stage-key="activeView"
+              :title="stageMeta[activeView]?.label"
+              :content="stages[activeView]?.content"
+              :thinking="stages[activeView]?.thinking"
+              :status="stages[activeView]?.status"
+            />
+          </div>
+        </template>
+
+      </div>
+    </main>
+  </div>
+</template>
+
+<style>
+/* Fade in animation */
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Hide scrollbar for thinking content */
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom scrollbar */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+</style>
