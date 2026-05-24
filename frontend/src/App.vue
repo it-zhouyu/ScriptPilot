@@ -33,7 +33,7 @@
     </div>
 
     <!-- Phase 2: Pipeline content -->
-    <div v-if="hasStarted" class="mt-6">
+    <div v-if="phase === 'generate'" class="mt-6">
       <ContentPanel :stageData="stageData" :thinkingData="thinkingData" :activeStage="currentStage" ref="contentPanel" />
     </div>
   </div>
@@ -50,8 +50,6 @@ const phase = ref('')          // '' | 'clarify' | 'generate'
 const clarifyLoading = ref(false)
 const analysis = ref('')
 const options = ref([])
-const selectedDirection = ref('')
-const hasStarted = ref(false)
 const currentStage = ref('')
 const stageData = reactive({ research: '', outline: '', content: '', script: '' })
 const thinkingData = reactive({ research: '', outline: '', content: '', script: '' })
@@ -65,8 +63,6 @@ function resetState() {
   clarifyLoading.value = false
   analysis.value = ''
   options.value = []
-  selectedDirection.value = ''
-  hasStarted.value = false
   currentStage.value = ''
   Object.keys(stageData).forEach(k => stageData[k] = '')
   Object.keys(thinkingData).forEach(k => thinkingData[k] = '')
@@ -94,10 +90,8 @@ async function handleClarify(topic) {
 }
 
 async function handleSelectDirection(opt) {
-  selectedDirection.value = opt.title + '：' + opt.description
   phase.value = 'generate'
   loading.value = true
-  hasStarted.value = true
   currentStage.value = ''
   Object.keys(stageData).forEach(k => stageData[k] = '')
   Object.keys(thinkingData).forEach(k => thinkingData[k] = '')

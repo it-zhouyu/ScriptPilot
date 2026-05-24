@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from backend.graph.pipeline import run_clarify_streaming, run_pipeline_streaming
+from backend.graph.pipeline import run_pipeline_streaming
+from backend.nodes.clarify import stream_clarify
 
 app = FastAPI(title="ScriptPilot")
 
@@ -37,7 +38,7 @@ async def clarify(request: Request):
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
     async def event_generator():
-        async for event in run_clarify_streaming(topic):
+        async for event in stream_clarify(topic):
             yield event
 
     return EventSourceResponse(event_generator())

@@ -21,7 +21,7 @@ def _format_result(idx: int, r: dict) -> str:
         f'<span class="search-card-title">{title}</span>'
         f'</div>'
         f'<p class="search-card-content">{content}</p>'
-        f'<a class="search-card-url" href="{safe_url}" target="_blank">{escape(url)}</a>'
+        f'<a class="search-card-url" href="{safe_url}" target="_blank">{safe_url}</a>'
         f'</div>'
     )
 

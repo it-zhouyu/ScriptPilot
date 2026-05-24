@@ -96,7 +96,7 @@ defineExpose({ reset })
 .prose-content h2 {
   font-size: 1.35em;
   font-weight: 600;
-  margin: 1.4em 0 0.6em;
+  margin: 1.4em 0 0.8em;
   color: #1e293b;
   padding-bottom: 0.4em;
   border-bottom: 2px solid #e2e8f0;
@@ -258,9 +258,6 @@ defineExpose({ reset })
 }
 
 /* Search result cards */
-.prose-content h2 {
-  margin-bottom: 0.8em;
-}
 .search-card {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
