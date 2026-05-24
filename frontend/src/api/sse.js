@@ -8,9 +8,10 @@
  * @param {(data: object) => void} handlers.onThinking - Thinking token received
  * @param {(data: object) => void} handlers.onOptions - Direction options received
  * @param {(data: object) => void} handlers.onDone - Pipeline complete
+ * @param {(data: object) => void} handlers.onResults - Research results received
  * @param {(error: Error) => void} handlers.onError - Error occurred
  */
-export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOptions, onDone, onError }) {
+export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOptions, onResults, onDone, onError }) {
   let doneCalled = false
 
   function dispatchEvent(currentEvent, line) {
@@ -20,6 +21,7 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
     else if (currentEvent === 'token' && onToken) onToken(data)
     else if (currentEvent === 'thinking' && onThinking) onThinking(data)
     else if (currentEvent === 'options' && onOptions) onOptions(data)
+    else if (currentEvent === 'results' && onResults) onResults(data)
     else if (currentEvent === 'done' && onDone) { doneCalled = true; onDone(data) }
   }
 
@@ -37,6 +39,7 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let currentEvent = ''
 
     while (true) {
       const { done, value } = await reader.read()
@@ -46,7 +49,6 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
 
-      let currentEvent = ''
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim()
@@ -57,7 +59,6 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
     }
 
     if (buffer.trim()) {
-      let currentEvent = ''
       for (const line of buffer.split('\n')) {
         if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim()

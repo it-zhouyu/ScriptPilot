@@ -26,7 +26,7 @@ async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
         yield event
 
 
-async def run_pipeline_streaming(topic: str, direction: str = "") -> AsyncGenerator[dict, None]:
+async def run_pipeline_streaming(topic: str, direction: str = "", research: str = "") -> AsyncGenerator[dict, None]:
     state: dict = {
         "topic": topic,
         "direction": direction,
@@ -40,6 +40,13 @@ async def run_pipeline_streaming(topic: str, direction: str = "") -> AsyncGenera
     logger.info("Pipeline started | topic: %s | direction: %s", topic, direction or "(none)")
 
     for stage_name in STAGES:
+        # Skip research if pre-selected content provided
+        if stage_name == "research" and research:
+            state["research"] = research
+            logger.info("[research] skipped (using pre-selected content) | %d chars", len(research))
+            yield {"event": "stage", "data": json.dumps({"stage": "research", "status": "completed"})}
+            continue
+
         start = time.time()
         logger.info("[%s] started", stage_name)
         yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}

@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from backend.graph.pipeline import run_clarify_streaming, run_pipeline_streaming
+from backend.nodes.research import _build_query, _format_result, _search
 
 app = FastAPI(title="ScriptPilot")
 
@@ -43,8 +45,8 @@ async def clarify(request: Request):
     return EventSourceResponse(event_generator())
 
 
-@app.post("/api/generate")
-async def generate(request: Request):
+@app.post("/api/research")
+async def research(request: Request):
     body = await request.json()
     topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
@@ -52,7 +54,41 @@ async def generate(request: Request):
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
     async def event_generator():
-        async for event in run_pipeline_streaming(topic, direction):
+        yield {"event": "stage", "data": json.dumps({"stage": "research", "status": "running"})}
+
+        query = f"{topic} {direction}" if direction else topic
+        results = _search(query)
+
+        if not results:
+            yield {"event": "results", "data": json.dumps({"results": []})}
+        else:
+            cards = []
+            for i, r in enumerate(results):
+                cards.append({
+                    "index": i + 1,
+                    "title": r.get("title", ""),
+                    "content": r.get("content", ""),
+                    "url": r.get("url", ""),
+                    "html": _format_result(i + 1, r),
+                })
+            yield {"event": "results", "data": json.dumps({"results": cards})}
+
+        yield {"event": "stage", "data": json.dumps({"stage": "research", "status": "completed"})}
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/api/generate")
+async def generate(request: Request):
+    body = await request.json()
+    topic = body.get("topic", "").strip()
+    direction = body.get("direction", "").strip()
+    research_content = body.get("research", "").strip()
+    if not topic:
+        return JSONResponse({"error": "topic is required"}, status_code=400)
+
+    async def event_generator():
+        async for event in run_pipeline_streaming(topic, direction, research=research_content):
             yield event
 
     return EventSourceResponse(event_generator())
