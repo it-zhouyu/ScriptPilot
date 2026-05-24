@@ -10,10 +10,10 @@ outline_prompt = ChatPromptTemplate.from_messages([
 - 从引入到深入再到总结
 - 每个子要点用一句话概括核心内容
 
-输出格式：
-# 文章标题
-## 一、章节标题
-- 子要点1：简述
-- 子要点2：简述"""),
-    ("human", "基于以下研究资料，请生成一个结构清晰的文章大纲：\n\n{research}"),
+输出要求：
+- 直接输出 HTML 格式内容，不要输出 markdown
+- 使用 h2 标签表示主章节，h3 标签表示子要点
+- 用 ul/li 展示子要点列表，每个 li 内用 strong 标签标注要点名称
+- 不要输出 html/head/body 等外层标签，只输出内容片段"""),
+    ("human", "主题方向：{direction}\n\n基于以下研究资料，请生成一个结构清晰的文章大纲：\n\n{research}"),
 ])

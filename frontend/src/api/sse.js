@@ -1,22 +1,26 @@
 /**
  * Send a POST request and parse SSE events from the response stream.
  * @param {string} url - API endpoint URL
- * @param {{topic: string}} body - Request body
+ * @param {object} body - Request body
  * @param {object} handlers - Event callbacks
  * @param {(data: object) => void} handlers.onStage - Stage start/complete
  * @param {(data: object) => void} handlers.onToken - Token received
  * @param {(data: object) => void} handlers.onThinking - Thinking token received
+ * @param {(data: object) => void} handlers.onOptions - Direction options received
  * @param {(data: object) => void} handlers.onDone - Pipeline complete
  * @param {(error: Error) => void} handlers.onError - Error occurred
  */
-export async function fetchSSE(url, body, { onStage, onToken, onThinking, onDone, onError }) {
+export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOptions, onDone, onError }) {
+  let doneCalled = false
+
   function dispatchEvent(currentEvent, line) {
     if (!line.startsWith('data: ')) return
     const data = JSON.parse(line.slice(6))
     if (currentEvent === 'stage' && onStage) onStage(data)
     else if (currentEvent === 'token' && onToken) onToken(data)
     else if (currentEvent === 'thinking' && onThinking) onThinking(data)
-    else if (currentEvent === 'done' && onDone) onDone(data)
+    else if (currentEvent === 'options' && onOptions) onOptions(data)
+    else if (currentEvent === 'done' && onDone) { doneCalled = true; onDone(data) }
   }
 
   try {
@@ -52,7 +56,6 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onDone
       }
     }
 
-    // Process any remaining buffer after stream closes
     if (buffer.trim()) {
       let currentEvent = ''
       for (const line of buffer.split('\n')) {
@@ -66,7 +69,6 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onDone
   } catch (err) {
     if (onError) onError(err)
   } finally {
-    // Ensure UI resets even if done event was missed
-    if (onDone) onDone({})
+    if (!doneCalled && onDone) onDone({})
   }
 }
