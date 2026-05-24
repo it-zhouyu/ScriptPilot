@@ -2,6 +2,7 @@
 import { ref, reactive, computed, nextTick, watch } from 'vue'
 import TopicInput from './components/TopicInput.vue'
 import StageContent from './components/StageContent.vue'
+import MarkdownSplitPanel from './components/MarkdownSplitPanel.vue'
 import { fetchSSE } from './api/sse.js'
 import { marked } from 'marked'
 
@@ -34,6 +35,16 @@ const stages = reactive({
   content:   { status: 'waiting', content: '', thinking: '' },
   script:    { status: 'waiting', content: '', thinking: '' },
 })
+
+const editedContent = reactive({
+  outline: '',
+  content: '',
+  script: '',
+})
+
+function getStageContent(key) {
+  return editedContent[key] || stages[key]?.content || ''
+}
 
 watch(analyzeThinking, () => {
   if (analyzeThinkingEl.value) {
@@ -202,26 +213,34 @@ async function handleDirectionSelect(opt) {
   })
 }
 
+const researchHtml = ref('')
+
 async function confirmResearch() {
   if (selectedResearch.value.size === 0) return
 
-  // Build HTML from selected results
   const htmlParts = ['<h2>搜索结果</h2>']
   researchResults.value.forEach((r, i) => {
     if (selectedResearch.value.has(i)) htmlParts.push(r.html)
   })
-  const researchHtml = htmlParts.join('')
-  stages.research.content = researchHtml
+  researchHtml.value = htmlParts.join('')
+  stages.research.content = researchHtml.value
   researchConfirmed.value = true
   phase.value = 'generating'
   currentStage.value = null
 
+  await runStage({ stopAfter: 'outline' })
+}
+
+async function runStage({ stopAfter = '' } = {}) {
   const directionText = `${topic.value} — ${selectedDirection.value.title}`
 
   await fetchSSE('/api/generate', {
     topic: topic.value,
     direction: directionText,
-    research: researchHtml,
+    research: researchHtml.value,
+    outline: editedContent.outline || undefined,
+    content: editedContent.content || undefined,
+    stop_after: stopAfter || undefined,
   }, {
     onStage(data) {
       if (data.status === 'running') {
@@ -237,6 +256,9 @@ async function confirmResearch() {
     onThinking(data) {
       stages[data.stage].thinking += data.thinking || data.token || ''
     },
+    onPaused(data) {
+      currentStage.value = null
+    },
     onDone() {
       phase.value = 'done'
     },
@@ -249,6 +271,16 @@ async function confirmResearch() {
       phase.value = 'error'
     },
   })
+}
+
+function continueToContent() {
+  editedContent.outline = editedContent.outline || stages.outline.content
+  runStage({ stopAfter: 'content' })
+}
+
+function continueToScript() {
+  editedContent.content = editedContent.content || stages.content.content
+  runStage()
 }
 
 function toggleResearchItem(index) {
@@ -286,6 +318,10 @@ function reset() {
   Object.keys(stages).forEach(k => {
     stages[k] = { status: 'waiting', content: '', thinking: '' }
   })
+  editedContent.outline = ''
+  editedContent.content = ''
+  editedContent.script = ''
+  researchHtml.value = ''
 }
 
 function selectDirection(opt) {
@@ -311,9 +347,7 @@ function retry() {
 }
 
 async function copyScript() {
-  const temp = document.createElement('div')
-  temp.innerHTML = stages.script.content
-  const text = temp.textContent || temp.innerText
+  const text = editedContent.script || stages.script.content
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -408,17 +442,6 @@ async function copyScript() {
           重试
         </button>
       </div>
-      <div v-else-if="phase === 'done'" class="px-4 pb-4 pt-2 border-t border-border-subtle">
-        <button
-          @click="copyScript"
-          class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-colors active:scale-[0.98]"
-        >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          复制口播稿
-        </button>
-      </div>
     </aside>
 
     <!-- ═══ Main Content ═══ -->
@@ -431,7 +454,9 @@ async function copyScript() {
     <main v-else class="flex-1 h-screen overflow-y-auto" ref="scrollContainer">
       <div :class="activeView === 'research' && !researchConfirmed
         ? 'px-8 py-6 h-full flex flex-col'
-        : 'max-w-3xl mx-auto px-6 py-6'">
+        : ['outline', 'content', 'script'].includes(activeView) && stages[activeView]?.content
+          ? 'px-6 py-6 h-full'
+          : 'max-w-3xl mx-auto px-6 py-6'">
 
         <!-- ── View: Direction ── -->
         <template v-if="activeView === 'direction'">
@@ -473,7 +498,7 @@ async function copyScript() {
                   <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
                   <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
                 </div>
-                <span class="text-sm text-fg-secondary">思考中...</span>
+                <span class="text-sm text-fg-secondary">思考中</span>
               </div>
               <div ref="analyzeThinkingEl" class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ analyzeThinking }}</div>
             </div>
@@ -674,13 +699,42 @@ async function copyScript() {
 
           <!-- Regular pipeline stage view -->
           <div v-else :key="activeView" class="animate-fade-in">
+            <!-- Research: use StageContent (HTML) -->
             <StageContent
+              v-if="activeView === 'research'"
               :stage-key="activeView"
               :title="stageMeta[activeView]?.label"
               :content="stages[activeView]?.content"
               :thinking="stages[activeView]?.thinking"
               :status="stages[activeView]?.status"
             />
+            <!-- Outline/Content/Script: split panel editor -->
+            <MarkdownSplitPanel
+              v-else
+              :model-value="getStageContent(activeView)"
+              @update:model-value="(val) => { editedContent[activeView] = val }"
+              :status="stages[activeView]?.status"
+              :thinking="stages[activeView]?.thinking"
+            >
+              <template v-if="activeView === 'outline' && stages.outline.status === 'completed' && phase === 'generating'" #action>
+                <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                  确认大纲，继续生成正文
+                </button>
+              </template>
+              <template v-if="activeView === 'content' && stages.content.status === 'completed' && phase === 'generating'" #action>
+                <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                  确认正文，继续生成口播稿
+                </button>
+              </template>
+              <template v-if="activeView === 'script' && phase === 'done'" #action>
+                <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  复制口播稿
+                </button>
+              </template>
+            </MarkdownSplitPanel>
           </div>
         </template>
 

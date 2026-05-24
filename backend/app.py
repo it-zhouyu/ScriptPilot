@@ -84,11 +84,20 @@ async def generate(request: Request):
     topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
     research_content = body.get("research", "").strip()
+    outline_content = body.get("outline", "").strip()
+    content_content = body.get("content", "").strip()
+    stop_after = body.get("stop_after", "").strip()
     if not topic:
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
     async def event_generator():
-        async for event in run_pipeline_streaming(topic, direction, research=research_content):
+        async for event in run_pipeline_streaming(
+            topic, direction,
+            research=research_content,
+            outline=outline_content,
+            content=content_content,
+            stop_after=stop_after,
+        ):
             yield event
 
     return EventSourceResponse(event_generator())
