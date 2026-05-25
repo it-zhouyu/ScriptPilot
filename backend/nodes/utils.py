@@ -60,7 +60,7 @@ async def stream_chain(prompt, inputs):
             raise
 
 
-_SINGLE_OPTION = re.compile(r'\{"id"\s*:\s*"[^"]*"\s*,\s*"title"\s*:\s*"[^"]*"\s*\}')
+_SINGLE_OPTION = re.compile(r'\{[^{}]*"(?:id|title)"\s*:\s*"[^"]*"[^{}]*"(?:id|title)"\s*:\s*"[^"]*"[^{}]*\}')
 
 
 async def stream_options_stage(stage_name, prompt, inputs, fallback_options):
@@ -68,32 +68,29 @@ async def stream_options_stage(stage_name, prompt, inputs, fallback_options):
     yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}
 
     full_text = ""
-    json_block_started = False
-    emitted_count = 0
+    json_start = -1
+    last_scan_end = 0
 
     async for item_type, text in stream_chain(prompt, inputs):
         if item_type == "thinking":
             yield {"event": "thinking", "data": json.dumps({"stage": stage_name, "token": text})}
         else:
             full_text += text
-            if not json_block_started and '```json' in full_text:
-                json_block_started = True
-            if not json_block_started:
+            if json_start == -1 and '```json' in full_text:
+                json_start = full_text.index('```json') + 7
+            if json_start == -1:
                 yield {"event": "token", "data": json.dumps({"stage": stage_name, "token": text})}
             else:
-                json_part = full_text[full_text.index('```json') + 7:]
-                for m in _SINGLE_OPTION.finditer(json_part):
-                    end_pos = m.end()
-                    if end_pos <= emitted_count:
-                        continue
+                json_part = full_text[json_start:]
+                for m in _SINGLE_OPTION.finditer(json_part, pos=last_scan_end):
                     try:
                         opt = json.loads(m.group())
                         yield {"event": "option", "data": json.dumps(opt)}
-                        emitted_count = end_pos
+                        last_scan_end = m.end()
                     except json.JSONDecodeError:
                         continue
 
-    if emitted_count == 0:
+    if last_scan_end == 0:
         logger.warning("[%s] failed to parse options, returning fallback", stage_name)
         for opt in fallback_options:
             yield {"event": "option", "data": json.dumps(opt)}

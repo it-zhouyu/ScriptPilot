@@ -149,6 +149,10 @@ watch(() => {
   if (activeView.value === currentStage.value) scrollToBottom()
 })
 
+watch([() => clarifyContent.value.length, () => styleContent.value.length, () => options.value.length, () => styleOptions.value.length], () => {
+  if (activeView.value === 'direction' || activeView.value === 'style') scrollToBottom()
+})
+
 // ── Handlers ───────────────────────────────────────────
 function fetchStyleOptions() {
   styleThinking.value = ''
@@ -434,6 +438,7 @@ function selectDirection(opt) {
   nextTick(() => {
     confirmBtnRef.value?.focus()
   })
+  setTimeout(scrollToBottom, 100)
 }
 
 function useCustomDirection() {
@@ -647,9 +652,9 @@ async function copyAsSubtitle() {
     <main v-else class="flex-1 h-screen overflow-y-auto" ref="scrollContainer">
       <div :class="activeView === 'research' && !researchConfirmed
         ? 'px-8 py-6 h-full flex flex-col'
-        : editableStages.includes(activeView) && stages[activeView]?.content
+        : activeView === 'content' && stages.content?.content
           ? 'px-6 py-6 h-full'
-          : 'max-w-3xl mx-auto px-6 py-6'">
+          : 'max-w-5xl mx-auto px-6 py-6'">
 
         <!-- ── View: Direction ── -->
         <template v-if="activeView === 'direction'">
@@ -1035,6 +1040,7 @@ async function copyAsSubtitle() {
               @update:model-value="(val) => { editedContent[activeView] = val }"
               :status="stages[activeView]?.status"
               :thinking="stages[activeView]?.thinking"
+              :simple="activeView === 'outline' || activeView === 'script'"
             >
               <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
