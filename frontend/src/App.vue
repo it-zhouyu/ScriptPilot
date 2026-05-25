@@ -307,6 +307,7 @@ function continueToScript() {
 async function handleStyleSelect(opt) {
   selectedStyle.value = opt
   pendingStyle.value = null
+  stages.style.status = 'completed'
   currentStage.value = 'script'
   stages.script.status = 'running'
   activeView.value = 'script'
