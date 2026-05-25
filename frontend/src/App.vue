@@ -61,9 +61,7 @@ const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
 
 const stageOrder = ['research', 'outline', 'content', 'script']
 const editableStages = computed(() => stageOrder.filter(s => s !== 'research'))
-const stagePausedOrDone = computed(() =>
-  (phase.value === 'generating' && !currentStage.value) || phase.value === 'done'
-)
+const stagePausedOrDone = computed(() => !currentStage.value)
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '文章大纲',   icon: 'list' },
@@ -222,64 +220,72 @@ async function confirmResearch() {
   })
   researchHtml.value = htmlParts.join('')
   researchConfirmed.value = true
-  phase.value = 'generating'
+  currentStage.value = 'outline'
+  stages.outline.status = 'running'
   userNavigated.value = false
 
-  await runStage({ stopAfter: 'outline' })
-}
-
-async function runStage({ stopAfter = '' } = {}) {
   const directionText = `${topic.value} — ${selectedDirection.value.title}`
-
-  await fetchSSE('/api/generate', {
+  await fetchSSE('/api/outline', {
     topic: topic.value,
     direction: directionText,
     research: researchHtml.value,
-    outline: editedContent.outline || undefined,
-    content: editedContent.content || undefined,
-    stop_after: stopAfter || undefined,
   }, {
-    onStage(data) {
-      if (data.status === 'running') {
-        currentStage.value = data.stage
-        stages[data.stage].status = 'running'
-      } else if (data.status === 'completed') {
-        stages[data.stage].status = 'completed'
-      }
-    },
-    onToken(data) {
-      stages[data.stage].content += data.token
-    },
-    onThinking(data) {
-      stages[data.stage].thinking += data.thinking || data.token || ''
-    },
-    onPaused(data) {
-      currentStage.value = null
-    },
-    onDone() {
-      phase.value = 'done'
-    },
-    onError(err) {
-      console.error('Generate error:', err)
-      const msg = typeof err === 'string' ? err : err?.message || String(err)
-      errorMessage.value = msg.includes('503') || msg.includes('busy')
-        ? 'AI 服务当前繁忙，生成中断。'
-        : '生成过程中出错，请重试。'
-      phase.value = 'error'
-    },
+    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onToken(data) { stages[data.stage].content += data.token },
+    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+    onDone() { currentStage.value = null },
+    onError(err) { handleGenerateError(err) },
   })
 }
 
 function continueToContent() {
   editedContent.outline = editedContent.outline || stages.outline.content
+  currentStage.value = 'content'
+  stages.content.status = 'running'
   userNavigated.value = false
-  runStage({ stopAfter: 'content' })
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+  fetchSSE('/api/content', {
+    topic: topic.value,
+    direction: directionText,
+    research: researchHtml.value,
+    outline: editedContent.outline,
+  }, {
+    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onToken(data) { stages[data.stage].content += data.token },
+    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+    onDone() { currentStage.value = null },
+    onError(err) { handleGenerateError(err) },
+  })
 }
 
 function continueToScript() {
   editedContent.content = editedContent.content || stages.content.content
+  currentStage.value = 'script'
+  stages.script.status = 'running'
   userNavigated.value = false
-  runStage()
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+  fetchSSE('/api/script', {
+    topic: topic.value,
+    direction: directionText,
+    content: editedContent.content,
+  }, {
+    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onToken(data) { stages[data.stage].content += data.token },
+    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+    onDone() { currentStage.value = null; phase.value = 'done' },
+    onError(err) { handleGenerateError(err) },
+  })
+}
+
+function handleGenerateError(err) {
+  console.error('Generate error:', err)
+  const msg = typeof err === 'string' ? err : err?.message || String(err)
+  errorMessage.value = msg.includes('503') || msg.includes('busy')
+    ? 'AI 服务当前繁忙，生成中断。'
+    : '生成过程中出错，请重试。'
+  phase.value = 'error'
 }
 
 function toggleResearchItem(index) {

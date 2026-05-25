@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from backend.graph.pipeline import run_clarify_streaming, run_pipeline_streaming
+from backend.graph.pipeline import run_clarify_streaming, run_stage_streaming
 from backend.nodes.research import _build_query, _format_result, _search
 
 app = FastAPI(title="ScriptPilot")
@@ -78,26 +78,56 @@ async def research(request: Request):
     return EventSourceResponse(event_generator())
 
 
-@app.post("/api/generate")
-async def generate(request: Request):
+@app.post("/api/outline")
+async def outline(request: Request):
     body = await request.json()
     topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
-    research_content = body.get("research", "").strip()
-    outline_content = body.get("outline", "").strip()
-    content_content = body.get("content", "").strip()
-    stop_after = body.get("stop_after", "").strip()
+    research = body.get("research", "").strip()
     if not topic:
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
+    state = {"topic": topic, "direction": direction, "research": research, "outline": "", "content": "", "script": ""}
+
     async def event_generator():
-        async for event in run_pipeline_streaming(
-            topic, direction,
-            research=research_content,
-            outline=outline_content,
-            content=content_content,
-            stop_after=stop_after,
-        ):
+        async for event in run_stage_streaming("outline", state):
+            yield event
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/api/content")
+async def content(request: Request):
+    body = await request.json()
+    topic = body.get("topic", "").strip()
+    direction = body.get("direction", "").strip()
+    research = body.get("research", "").strip()
+    outline = body.get("outline", "").strip()
+    if not topic:
+        return JSONResponse({"error": "topic is required"}, status_code=400)
+
+    state = {"topic": topic, "direction": direction, "research": research, "outline": outline, "content": "", "script": ""}
+
+    async def event_generator():
+        async for event in run_stage_streaming("content", state):
+            yield event
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/api/script")
+async def script(request: Request):
+    body = await request.json()
+    topic = body.get("topic", "").strip()
+    direction = body.get("direction", "").strip()
+    content = body.get("content", "").strip()
+    if not topic:
+        return JSONResponse({"error": "topic is required"}, status_code=400)
+
+    state = {"topic": topic, "direction": direction, "research": "", "outline": "", "content": content, "script": ""}
+
+    async def event_generator():
+        async for event in run_stage_streaming("script", state):
             yield event
 
     return EventSourceResponse(event_generator())

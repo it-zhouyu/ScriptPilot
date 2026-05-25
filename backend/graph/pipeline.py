@@ -1,20 +1,15 @@
 import json
 import logging
-import time
 from typing import AsyncGenerator
 
 from backend.nodes.clarify import stream_clarify
-from backend.nodes.research import stream_research
 from backend.nodes.outline import stream_outline
 from backend.nodes.content import stream_content
 from backend.nodes.script import stream_script
 
 logger = logging.getLogger("scriptpilot")
 
-STAGES = ["research", "outline", "content", "script"]
-
 STREAM_FNS = {
-    "research": stream_research,
     "outline": stream_outline,
     "content": stream_content,
     "script": stream_script,
@@ -26,50 +21,19 @@ async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
         yield event
 
 
-async def run_pipeline_streaming(topic: str, direction: str = "", research: str = "", outline: str = "", content: str = "", stop_after: str = "") -> AsyncGenerator[dict, None]:
-    state: dict = {
-        "topic": topic,
-        "direction": direction,
-        "research": "",
-        "outline": "",
-        "content": "",
-        "script": "",
-        "current_stage": "",
-    }
+async def run_stage_streaming(stage_name: str, state: dict) -> AsyncGenerator[dict, None]:
+    """Run a single pipeline stage, yielding SSE events."""
+    logger.info("[%s] started", stage_name)
+    yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}
 
-    logger.info("Pipeline started | topic: %s | direction: %s", topic, direction or "(none)")
+    full_text = ""
+    async for item_type, text in STREAM_FNS[stage_name](state):
+        if item_type == "thinking":
+            yield {"event": "thinking", "data": json.dumps({"stage": stage_name, "token": text})}
+        else:
+            full_text += text
+            yield {"event": "token", "data": json.dumps({"stage": stage_name, "token": text})}
 
-    prefill = {"research": research, "outline": outline, "content": content}
-
-    for stage_name in STAGES:
-        if prefill.get(stage_name):
-            state[stage_name] = prefill[stage_name]
-            logger.info("[%s] skipped (using pre-filled content) | %d chars", stage_name, len(prefill[stage_name]))
-            yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
-            continue
-
-        start = time.time()
-        logger.info("[%s] started", stage_name)
-        yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}
-
-        full_text = ""
-        async for item_type, text in STREAM_FNS[stage_name](state):
-            if item_type == "thinking":
-                yield {"event": "thinking", "data": json.dumps({"stage": stage_name, "token": text})}
-            else:
-                full_text += text
-                yield {"event": "token", "data": json.dumps({"stage": stage_name, "token": text})}
-
-        state[stage_name] = full_text
-
-        elapsed = time.time() - start
-        logger.info("[%s] completed | %.1fs | %d chars", stage_name, elapsed, len(full_text))
-        yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
-
-        if stop_after and stage_name == stop_after:
-            logger.info("Pipeline paused after [%s]", stage_name)
-            yield {"event": "paused", "data": json.dumps({"stage": stage_name})}
-            return
-
-    logger.info("Pipeline completed | total stages: %d", len(STAGES))
-    yield {"event": "done", "data": json.dumps(state)}
+    logger.info("[%s] completed | %d chars", stage_name, len(full_text))
+    yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
+    yield {"event": "done", "data": json.dumps({"stage": stage_name})}
