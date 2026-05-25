@@ -30,6 +30,12 @@ const styleContent = ref('')
 
 const clarifyContent = ref('')
 
+const researchEnabled = ref(true)
+const stageOrder = computed(() => {
+  const all = ['research', 'outline', 'content', 'style', 'script']
+  return researchEnabled.value ? all : all.filter(s => s !== 'research')
+})
+
 const researchResults = ref([])
 const selectedResearch = ref(new Set())
 const researchConfirmed = ref(false)
@@ -66,8 +72,7 @@ function renderMarkdown(text) {
 const renderedClarifyHtml = computed(() => renderMarkdown(clarifyContent.value))
 const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
 
-const stageOrder = ['research', 'outline', 'content', 'style', 'script']
-const editableStages = computed(() => stageOrder.filter(s => s !== 'research' && s !== 'style'))
+const editableStages = computed(() => stageOrder.value.filter(s => s !== 'research' && s !== 'style'))
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '文章大纲',   icon: 'list' },
@@ -81,7 +86,7 @@ const navItems = computed(() => {
   const items = [
     { key: 'direction', label: '创作方向', icon: 'compass', status: getDirectionStatus() },
   ]
-  stageOrder.forEach(key => {
+  stageOrder.value.forEach(key => {
     items.push({ key, label: stageMeta[key].label, icon: stageMeta[key].icon, status: stages[key].status })
   })
   return items
@@ -183,22 +188,43 @@ async function handleTopicSubmit(text) {
 async function handleDirectionSelect(opt) {
   selectedDirection.value = opt
   pendingDirection.value = null
-  phase.value = 'researching'
-  currentStage.value = 'research'
-  activeView.value = 'research'
   userNavigated.value = false
-  researchConfirmed.value = false
-  researchResults.value = []
-  selectedResearch.value = new Set()
-  activeResearchIndex.value = null
 
-  stages.research = { status: 'running', content: '', thinking: '' }
   stages.outline = { status: 'waiting', content: '', thinking: '' }
   stages.content = { status: 'waiting', content: '', thinking: '' }
   stages.style = { status: 'waiting', content: '', thinking: '' }
   stages.script = { status: 'waiting', content: '', thinking: '' }
 
   const directionText = `${topic.value} — ${opt.title}`
+
+  if (!researchEnabled.value) {
+    // 跳过资料收集，直接生成大纲
+    phase.value = 'researching'
+    currentStage.value = 'outline'
+    activeView.value = 'outline'
+    stages.outline.status = 'running'
+
+    await fetchSSE('/api/outline', {
+      topic: topic.value,
+      direction: directionText,
+      research: '',
+    }, {
+      onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
+      onToken(data) { stages[data.stage].content += data.token },
+      onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+      onError(err) { handleGenerateError(err) },
+    })
+    return
+  }
+
+  phase.value = 'researching'
+  currentStage.value = 'research'
+  activeView.value = 'research'
+  researchConfirmed.value = false
+  researchResults.value = []
+  selectedResearch.value = new Set()
+  activeResearchIndex.value = null
+  stages.research = { status: 'running', content: '', thinking: '' }
 
   await fetchSSE('/api/research', { topic: topic.value, direction: directionText }, {
     onStage(data) {
@@ -441,6 +467,17 @@ async function copyScript() {
     document.body.removeChild(ta)
   }
 }
+
+// ── Fetch backend config on mount ──────────────────────
+;(async () => {
+  try {
+    const res = await fetch('/api/config')
+    if (res.ok) {
+      const cfg = await res.json()
+      researchEnabled.value = cfg.researchEnabled ?? true
+    }
+  } catch { /* use defaults */ }
+})()
 </script>
 
 <template>

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from backend.graph.pipeline import run_clarify_streaming, run_style_streaming, run_stage_streaming
+from backend.config import is_research_enabled
 from backend.nodes.research import _build_query, _format_result, _search
 
 app = FastAPI(title="ScriptPilot")
@@ -29,6 +30,11 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+async def config():
+    return {"researchEnabled": is_research_enabled()}
 
 
 # 分析主题，生成创作方向选项
