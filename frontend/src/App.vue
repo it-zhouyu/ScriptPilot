@@ -61,7 +61,6 @@ const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
 
 const stageOrder = ['research', 'outline', 'content', 'script']
 const editableStages = computed(() => stageOrder.filter(s => s !== 'research'))
-const stagePausedOrDone = computed(() => !currentStage.value)
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '文章大纲',   icon: 'list' },
@@ -692,12 +691,12 @@ async function copyScript() {
               :status="stages[activeView]?.status"
               :thinking="stages[activeView]?.thinking"
             >
-              <template v-if="activeView === 'outline' && stages.outline.status === 'completed' && stagePausedOrDone" #action>
+              <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
                 <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   确认大纲，继续生成正文
                 </button>
               </template>
-              <template v-if="activeView === 'content' && stages.content.status === 'completed' && stagePausedOrDone" #action>
+              <template v-if="activeView === 'content' && stages.content.status === 'completed'" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   确认正文，继续生成口播稿
                 </button>
