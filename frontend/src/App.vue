@@ -7,9 +7,7 @@ import { fetchSSE } from './api/sse.js'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
-// ── State ──────────────────────────────────────────────
 const phase = ref('input')
-// phases: 'input' | 'analyzing' | 'select-direction' | 'researching' | 'generating' | 'error' | 'done'
 
 const topic = ref('')
 const analyzeThinking = ref('')
@@ -17,14 +15,18 @@ const analysis = ref('')
 const options = ref([])
 const selectedDirection = ref(null)
 const currentStage = ref(null)
-const activeView = ref('direction') // 'direction' | stage keys
+const activeView = ref('direction')
 const userNavigated = ref(false)
 const errorMessage = ref('')
 const pendingDirection = ref(null)
+const customDirection = ref('')
+const isCustomDirection = ref(false)
 
 const styleOptions = ref([])
 const selectedStyle = ref(null)
 const pendingStyle = ref(null)
+const customStyle = ref('')
+const isCustomStyle = ref(false)
 const styleThinking = ref('')
 const styleContent = ref('')
 
@@ -70,8 +72,13 @@ function renderMarkdown(text) {
   return DOMPurify.sanitize(html.replace(/<p>\s*<\/p>/g, '').replace(/<pre><code>\s*<\/code><\/pre>/g, ''))
 }
 
+const directionText = computed(() =>
+  selectedDirection.value ? `${topic.value} — ${selectedDirection.value.title}` : topic.value
+)
+
 const renderedClarifyHtml = computed(() => renderMarkdown(clarifyContent.value))
 const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
+const renderedStyleHtml = computed(() => renderMarkdown(styleContent.value))
 
 const editableStages = computed(() => stageOrder.value.filter(s => s !== 'research' && s !== 'style'))
 const stageMeta = {
@@ -82,7 +89,6 @@ const stageMeta = {
   script:    { label: '口播稿', icon: 'mic' },
 }
 
-// ── Sidebar nav items ──────────────────────────────────
 const navItems = computed(() => {
   const items = [
     { key: 'direction', label: '创作方向', icon: 'compass', status: getDirectionStatus() },
@@ -114,14 +120,12 @@ function handleNavClick(key) {
   if (key === 'research') researchConfirmed.value = false
 }
 
-// Auto-switch to running stage
 watch(currentStage, (stage) => {
   if (stage && !userNavigated.value) {
     activeView.value = stage
   }
 })
 
-// Reset user navigation flag after 8s
 let navTimeout = null
 watch(activeView, () => {
   if (userNavigated.value) {
@@ -130,7 +134,6 @@ watch(activeView, () => {
   }
 })
 
-// ── Scroll ─────────────────────────────────────────────
 const scrollContainer = ref(null)
 const scrollToBottom = async () => {
   await nextTick()
@@ -139,7 +142,6 @@ const scrollToBottom = async () => {
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
 }
 
-// Auto-scroll when content changes for active running stage
 watch(() => {
   if (!currentStage.value) return ''
   return stages[currentStage.value]?.content?.length ?? 0
@@ -148,6 +150,42 @@ watch(() => {
 })
 
 // ── Handlers ───────────────────────────────────────────
+function fetchStyleOptions() {
+  styleThinking.value = ''
+  styleContent.value = ''
+  styleOptions.value = []
+  selectedStyle.value = null
+  pendingStyle.value = null
+  currentStage.value = 'style'
+  stages.style.status = 'running'
+  activeView.value = 'style'
+  userNavigated.value = false
+
+  return fetchSSE('/api/style', {
+    topic: topic.value,
+    direction: directionText.value,
+  }, {
+    onThinking(data) {
+      styleThinking.value += data.thinking || data.token || ''
+    },
+    onToken(data) {
+      styleContent.value += data.token || ''
+      stages.style.content = styleContent.value
+    },
+    onOptions(data) {
+      styleOptions.value = data.options || []
+      stages.style.status = 'waiting'
+      currentStage.value = null
+    },
+    onStage(data) {
+      if (data.stage === 'style') {
+        stages.style.status = data.status === 'completed' ? 'completed' : data.status
+      }
+    },
+    onError(err) { handleGenerateError(err) },
+  })
+}
+
 async function handleTopicSubmit(text) {
   topic.value = text
   phase.value = 'analyzing'
@@ -196,43 +234,9 @@ async function handleDirectionSelect(opt) {
   stages.style = { status: 'waiting', content: '', thinking: '' }
   stages.script = { status: 'waiting', content: '', thinking: '' }
 
-  const directionText = `${topic.value} — ${opt.title}`
-
   if (!researchEnabled.value) {
-    // 跳过资料收集，直接选择口播风格
     phase.value = 'researching'
-    currentStage.value = 'style'
-    activeView.value = 'style'
-    stages.style.status = 'running'
-    styleThinking.value = ''
-    styleContent.value = ''
-    styleOptions.value = []
-    selectedStyle.value = null
-    pendingStyle.value = null
-
-    await fetchSSE('/api/style', {
-      topic: topic.value,
-      direction: directionText,
-    }, {
-      onThinking(data) {
-        styleThinking.value += data.thinking || data.token || ''
-      },
-      onToken(data) {
-        styleContent.value += data.token || ''
-        stages.style.content = styleContent.value
-      },
-      onOptions(data) {
-        styleOptions.value = data.options || []
-        stages.style.status = 'waiting'
-        currentStage.value = null
-      },
-      onStage(data) {
-        if (data.stage === 'style') {
-          stages.style.status = data.status === 'completed' ? 'completed' : data.status
-        }
-      },
-      onError(err) { handleGenerateError(err) },
-    })
+    await fetchStyleOptions()
     return
   }
 
@@ -245,7 +249,7 @@ async function handleDirectionSelect(opt) {
   activeResearchIndex.value = null
   stages.research = { status: 'running', content: '', thinking: '' }
 
-  await fetchSSE('/api/research', { topic: topic.value, direction: directionText }, {
+  await fetchSSE('/api/research', { topic: topic.value, direction: directionText.value }, {
     onStage(data) {
       if (data.stage === 'research') {
         stages.research.status = data.status === 'completed' ? 'completed' : 'running'
@@ -274,40 +278,8 @@ async function confirmResearch() {
   })
   researchHtml.value = htmlParts.join('')
   researchConfirmed.value = true
-  currentStage.value = 'style'
-  stages.style.status = 'running'
-  activeView.value = 'style'
-  userNavigated.value = false
-  styleThinking.value = ''
-  styleContent.value = ''
-  styleOptions.value = []
-  selectedStyle.value = null
-  pendingStyle.value = null
 
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
-  await fetchSSE('/api/style', {
-    topic: topic.value,
-    direction: directionText,
-  }, {
-    onThinking(data) {
-      styleThinking.value += data.thinking || data.token || ''
-    },
-    onToken(data) {
-      styleContent.value += data.token || ''
-      stages.style.content = styleContent.value
-    },
-    onOptions(data) {
-      styleOptions.value = data.options || []
-      stages.style.status = 'waiting'
-      currentStage.value = null
-    },
-    onStage(data) {
-      if (data.stage === 'style') {
-        stages.style.status = data.status === 'completed' ? 'completed' : data.status
-      }
-    },
-    onError(err) { handleGenerateError(err) },
-  })
+  await fetchStyleOptions()
 }
 
 function continueToContent() {
@@ -316,10 +288,9 @@ function continueToContent() {
   stages.content.status = 'running'
   userNavigated.value = false
 
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
   fetchSSE('/api/content', {
     topic: topic.value,
-    direction: directionText,
+    direction: directionText.value,
     research: researchHtml.value,
     outline: editedContent.outline,
     script: editedContent.script,
@@ -338,10 +309,9 @@ function continueToScript() {
   stages.script.status = 'running'
   userNavigated.value = false
 
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
   fetchSSE('/api/script', {
     topic: topic.value,
-    direction: directionText,
+    direction: directionText.value,
     outline: editedContent.outline,
     style: selectedStyle.value?.title || '',
   }, {
@@ -361,10 +331,9 @@ async function handleStyleSelect(opt) {
   activeView.value = 'outline'
   userNavigated.value = false
 
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
   fetchSSE('/api/outline', {
     topic: topic.value,
-    direction: directionText,
+    direction: directionText.value,
     research: researchHtml.value,
     style: opt.title,
   }, {
@@ -412,9 +381,13 @@ function reset() {
   clarifyContent.value = ''
   errorMessage.value = ''
   pendingDirection.value = null
+  customDirection.value = ''
+  isCustomDirection.value = false
   styleOptions.value = []
   selectedStyle.value = null
   pendingStyle.value = null
+  customStyle.value = ''
+  isCustomStyle.value = false
   styleThinking.value = ''
   styleContent.value = ''
   researchResults.value = []
@@ -433,39 +406,67 @@ function reset() {
 const confirmBtnRef = ref(null)
 
 function selectDirection(opt) {
+  isCustomDirection.value = false
+  customDirection.value = ''
   pendingDirection.value = opt
   nextTick(() => {
     confirmBtnRef.value?.focus()
   })
 }
 
+function useCustomDirection() {
+  pendingDirection.value = null
+  isCustomDirection.value = true
+  nextTick(() => {
+    confirmBtnRef.value?.focus()
+  })
+}
+
 function confirmDirection() {
-  if (pendingDirection.value) {
+  if (isCustomDirection.value && customDirection.value.trim()) {
+    handleDirectionSelect({ id: '★', title: customDirection.value.trim() })
+  } else if (pendingDirection.value) {
     handleDirectionSelect(pendingDirection.value)
   }
 }
 
 function changeDirection() {
   pendingDirection.value = null
+  isCustomDirection.value = false
+  customDirection.value = ''
 }
 
 const confirmStyleBtnRef = ref(null)
 
 function selectStyle(opt) {
+  isCustomStyle.value = false
+  customStyle.value = ''
   pendingStyle.value = opt
   nextTick(() => {
     confirmStyleBtnRef.value?.focus()
   })
 }
 
+function useCustomStyle() {
+  pendingStyle.value = null
+  isCustomStyle.value = true
+  nextTick(() => {
+    confirmStyleBtnRef.value?.focus()
+  })
+}
+
 function confirmStyle() {
-  if (pendingStyle.value) {
+  if (isCustomStyle.value && customStyle.value.trim()) {
+    handleStyleSelect({ id: '★', title: customStyle.value.trim() })
+  } else if (pendingStyle.value) {
     handleStyleSelect(pendingStyle.value)
   }
 }
 
 function changeStyle() {
   pendingStyle.value = null
+  isCustomStyle.value = false
+  customStyle.value = ''
 }
 
 function retry() {
@@ -492,7 +493,6 @@ async function copyScript() {
   }
 }
 
-// ── Fetch backend config on mount ──────────────────────
 ;(async () => {
   try {
     const res = await fetch('/api/config')
@@ -687,7 +687,7 @@ async function copyScript() {
             </div>
 
             <!-- Direction cards (selectable) -->
-            <template v-if="phase === 'select-direction' && !pendingDirection && !selectedDirection">
+            <template v-if="phase === 'select-direction' && !pendingDirection && !selectedDirection && !isCustomDirection">
               <p class="text-xs text-fg-dim mb-3">选择一个创作方向：</p>
               <div class="space-y-2">
                 <button
@@ -703,6 +703,48 @@ async function copyScript() {
                     <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors">{{ opt.title }}</h4>
                   </div>
                 </button>
+                <button
+                  @click="useCustomDirection"
+                  class="w-full text-left px-4 py-3 rounded-xl border border-dashed border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group"
+                >
+                  <div class="flex items-center gap-3">
+                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-fg-dim group-hover:text-accent transition-colors">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </span>
+                    <h4 class="text-sm text-fg-dim group-hover:text-accent transition-colors">自己写一个方向</h4>
+                  </div>
+                </button>
+              </div>
+            </template>
+
+            <!-- Custom direction input -->
+            <template v-if="phase === 'select-direction' && isCustomDirection && !selectedDirection">
+              <p class="text-xs text-fg-dim mb-3">输入你的创作方向：</p>
+              <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
+                <input
+                  ref="confirmBtnRef"
+                  v-model="customDirection"
+                  @keydown.enter="confirmDirection"
+                  placeholder="例如：从产品经理视角拆解 AI 工具的实际价值"
+                  class="w-full bg-transparent text-fg text-sm placeholder-fg-dim focus:outline-none"
+                />
+              </div>
+              <div class="flex gap-3 mt-5">
+                <button
+                  @click="confirmDirection"
+                  :disabled="!customDirection.trim()"
+                  class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all duration-200 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  确认
+                </button>
+                <button
+                  @click="changeDirection"
+                  class="px-6 py-2.5 bg-white text-fg-secondary text-sm font-medium rounded-xl border border-border-subtle hover:border-border hover:text-fg transition-all duration-200"
+                >
+                  返回选择
+                </button>
               </div>
             </template>
           </div>
@@ -715,12 +757,12 @@ async function copyScript() {
 
           <!-- Streaming LLM output -->
           <div v-if="styleContent && !styleOptions.length" class="animate-fade-in">
-            <div class="prose-content text-sm text-fg-secondary" v-html="renderMarkdown(styleContent)"></div>
+            <div class="prose-content text-sm text-fg-secondary" v-html="renderedStyleHtml"></div>
           </div>
 
           <!-- Style selection -->
           <div v-if="styleOptions.length > 0" class="animate-fade-in">
-            <div v-if="styleContent" class="prose-content text-sm text-fg-secondary mb-4" v-html="renderMarkdown(styleContent)"></div>
+            <div v-if="styleContent" class="prose-content text-sm text-fg-secondary mb-4" v-html="renderedStyleHtml"></div>
 
             <!-- Already confirmed & generating script -->
             <div v-if="selectedStyle" class="mb-6">
@@ -764,7 +806,7 @@ async function copyScript() {
             </div>
 
             <!-- Style cards (selectable) -->
-            <template v-if="!pendingStyle && !selectedStyle">
+            <template v-if="!pendingStyle && !selectedStyle && !isCustomStyle">
               <p class="text-xs text-fg-dim mb-3">选择一个口播风格：</p>
               <div class="space-y-2">
                 <button
@@ -779,6 +821,48 @@ async function copyScript() {
                     </span>
                     <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors">{{ opt.title }}</h4>
                   </div>
+                </button>
+                <button
+                  @click="useCustomStyle"
+                  class="w-full text-left px-4 py-3 rounded-xl border border-dashed border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group"
+                >
+                  <div class="flex items-center gap-3">
+                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-fg-dim group-hover:text-accent transition-colors">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </span>
+                    <h4 class="text-sm text-fg-dim group-hover:text-accent transition-colors">自己写一个风格</h4>
+                  </div>
+                </button>
+              </div>
+            </template>
+
+            <!-- Custom style input -->
+            <template v-if="isCustomStyle && !selectedStyle">
+              <p class="text-xs text-fg-dim mb-3">输入你想要的口播风格：</p>
+              <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
+                <input
+                  ref="confirmStyleBtnRef"
+                  v-model="customStyle"
+                  @keydown.enter="confirmStyle"
+                  placeholder="例如：像和老朋友聊天一样轻松自然"
+                  class="w-full bg-transparent text-fg text-sm placeholder-fg-dim focus:outline-none"
+                />
+              </div>
+              <div class="flex gap-3 mt-5">
+                <button
+                  @click="confirmStyle"
+                  :disabled="!customStyle.trim()"
+                  class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all duration-200 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  确认
+                </button>
+                <button
+                  @click="changeStyle"
+                  class="px-6 py-2.5 bg-white text-fg-secondary text-sm font-medium rounded-xl border border-border-subtle hover:border-border hover:text-fg transition-all duration-200"
+                >
+                  返回选择
                 </button>
               </div>
             </template>

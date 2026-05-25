@@ -4,9 +4,20 @@ from html import escape
 
 from tavily import TavilyClient
 
-from backend.graph.state import PipelineState
-
 logger = logging.getLogger("scriptpilot")
+
+_tavily_client = None
+
+
+def _get_tavily_client():
+    global _tavily_client
+    if _tavily_client is not None:
+        return _tavily_client
+    key = os.getenv("TAVILY_API_KEY", "")
+    if not key:
+        return None
+    _tavily_client = TavilyClient(api_key=key)
+    return _tavily_client
 
 
 def _format_result(idx: int, r: dict) -> str:
@@ -27,29 +38,12 @@ def _format_result(idx: int, r: dict) -> str:
 
 
 def _search(query: str) -> list[dict]:
-    key = os.getenv("TAVILY_API_KEY", "")
-    if not key:
+    client = _get_tavily_client()
+    if not client:
         logger.info("[research] Tavily key not set, skipping web search")
         return []
     logger.info("[research] Searching web via Tavily: %s", query)
-    client = TavilyClient(api_key=key)
     response = client.search(query, max_results=8, search_depth="advanced")
     results = response.get("results", [])
     logger.info("[research] Found %d results", len(results))
     return results
-
-
-def _build_query(state: PipelineState) -> str:
-    topic = state.get("topic", "")
-    direction = state.get("direction", "")
-    return f"{topic} {direction}" if direction else topic
-
-
-async def stream_research(state: PipelineState):
-    results = _search(_build_query(state))
-    if not results:
-        yield ("content", "<p>未找到搜索结果，请检查 Tavily API Key 配置。</p>")
-        return
-    yield ("content", '<h2>搜索结果</h2>')
-    for i, r in enumerate(results):
-        yield ("content", _format_result(i + 1, r))

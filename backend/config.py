@@ -23,20 +23,30 @@ def is_content_enabled():
     return _content_enabled
 
 
+_llm = None
+_fallback_llm = None
+
+
 def get_llm():
-    return ChatDeepSeek(
-        model="deepseek-v4-flash",
-        api_key=_api_key,
-        streaming=True,
-        reasoning_effort="high",
-        extra_body={"thinking": {"type": "enabled"}},
-    )
+    global _llm
+    if _llm is None:
+        _llm = ChatDeepSeek(
+            model="deepseek-v4-flash",
+            api_key=_api_key,
+            streaming=True,
+            reasoning_effort="high",
+            extra_body={"thinking": {"type": "enabled"}},
+        )
+    return _llm
 
 
 def get_fallback_llm():
-    return ChatOpenAI(
-        model="glm-5.1",
-        api_key=_zhipu_api_key,
-        base_url="https://open.bigmodel.cn/api/paas/v4",
-        streaming=True,
-    )
+    global _fallback_llm
+    if _fallback_llm is None:
+        _fallback_llm = ChatOpenAI(
+            model="glm-5.1",
+            api_key=_zhipu_api_key,
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            streaming=True,
+        )
+    return _fallback_llm
