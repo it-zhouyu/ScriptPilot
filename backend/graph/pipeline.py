@@ -42,4 +42,3 @@ async def run_stage_streaming(stage_name: str, state: dict) -> AsyncGenerator[di
 
     logger.info("[%s] completed | %d chars", stage_name, len(full_text))
     yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
-    yield {"event": "done", "data": json.dumps({"stage": stage_name})}

@@ -229,10 +229,9 @@ async function confirmResearch() {
     direction: directionText,
     research: researchHtml.value,
   }, {
-    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
     onToken(data) { stages[data.stage].content += data.token },
     onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
-    onDone() { currentStage.value = null },
     onError(err) { handleGenerateError(err) },
   })
 }
@@ -250,10 +249,9 @@ function continueToContent() {
     research: researchHtml.value,
     outline: editedContent.outline,
   }, {
-    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
     onToken(data) { stages[data.stage].content += data.token },
     onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
-    onDone() { currentStage.value = null },
     onError(err) { handleGenerateError(err) },
   })
 }
@@ -270,10 +268,9 @@ function continueToScript() {
     direction: directionText,
     content: editedContent.content,
   }, {
-    onStage(data) { if (data.status === 'completed') stages[data.stage].status = 'completed' },
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null; phase.value = 'done' } },
     onToken(data) { stages[data.stage].content += data.token },
     onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
-    onDone() { currentStage.value = null; phase.value = 'done' },
     onError(err) { handleGenerateError(err) },
   })
 }
