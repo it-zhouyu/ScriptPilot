@@ -31,7 +31,7 @@ def get_llm():
     global _llm
     if _llm is None:
         _llm = ChatDeepSeek(
-            model="deepseek-v4-flash",
+            model="deepseek-v4-pro",
             api_key=_api_key,
             streaming=True,
             reasoning_effort="high",
