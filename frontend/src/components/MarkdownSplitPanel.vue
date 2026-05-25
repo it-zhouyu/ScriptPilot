@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import ThinkingIndicator from './ThinkingIndicator.vue'
@@ -14,11 +14,23 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const textareaRef = ref(null)
+const renderedHtml = ref('')
+let renderTimeout = null
 
-const renderedHtml = computed(() => {
-  if (!props.modelValue) return ''
-  return DOMPurify.sanitize(marked.parse(props.modelValue, { breaks: true }))
-})
+function updateHtml() {
+  renderedHtml.value = props.modelValue
+    ? DOMPurify.sanitize(marked.parse(props.modelValue, { breaks: true }))
+    : ''
+}
+
+watch(() => props.modelValue, () => {
+  if (props.status === 'running') {
+    clearTimeout(renderTimeout)
+    renderTimeout = setTimeout(updateHtml, 100)
+  } else {
+    updateHtml()
+  }
+}, { immediate: true })
 
 function onInput(e) {
   emit('update:modelValue', e.target.value)
