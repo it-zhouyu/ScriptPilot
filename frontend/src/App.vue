@@ -3,6 +3,7 @@ import { ref, reactive, computed, nextTick, watch } from 'vue'
 import TopicInput from './components/TopicInput.vue'
 import MarkdownSplitPanel from './components/MarkdownSplitPanel.vue'
 import ThinkingIndicator from './components/ThinkingIndicator.vue'
+import FeedbackModal from './components/FeedbackModal.vue'
 import { fetchSSE } from './api/sse.js'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -17,6 +18,7 @@ const selectedDirection = ref(null)
 const currentStage = ref(null)
 const activeView = ref('direction')
 const userNavigated = ref(false)
+const showFeedback = ref(false)
 const errorMessage = ref('')
 const pendingDirection = ref(null)
 const customDirection = ref('')
@@ -631,12 +633,9 @@ async function copyAsSubtitle() {
         </button>
       </nav>
 
-      <!-- Bottom: copy / retry -->
+      <!-- Bottom: retry -->
       <div v-if="phase === 'error'" class="px-4 pb-4 pt-2 border-t border-red-100">
-        <button
-          @click="retry"
-          class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors active:scale-[0.98]"
-        >
+        <button @click="retry" class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors active:scale-[0.98]">
           重试
         </button>
       </div>
@@ -1088,6 +1087,16 @@ async function copyAsSubtitle() {
         {{ toast }}
       </div>
     </Transition>
+
+    <!-- Floating feedback button -->
+    <button @click="showFeedback = true" class="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3 bg-accent text-white text-sm font-medium rounded-2xl shadow-lg shadow-accent/20 hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-0.5 transition-all active:scale-95">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+      帮我们变得更好
+    </button>
+
+    <FeedbackModal :show="showFeedback" @close="showFeedback = false" />
   </div>
 </template>
 

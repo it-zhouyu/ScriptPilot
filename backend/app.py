@@ -1,8 +1,12 @@
 import json
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File, Form
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,7 +20,7 @@ from sse_starlette.sse import EventSourceResponse
 from backend.graph.pipeline import run_stage_streaming
 from backend.nodes.clarify import stream_clarify
 from backend.nodes.style import stream_style
-from backend.config import is_research_enabled, is_content_enabled
+from backend.config import is_research_enabled, is_content_enabled, get_smtp_config
 from backend.nodes.research import _format_result, _search
 
 app = FastAPI(title="ScriptPilot")
@@ -160,6 +164,42 @@ async def script(request: Request):
         "style": body.get("style", "").strip(),
     }
     return _sse(run_stage_streaming("script", state))
+
+
+@app.post("/api/feedback")
+async def feedback(
+    text: str = Form(""),
+    images: list[UploadFile] = File(default=[]),
+):
+    cfg = get_smtp_config()
+    if not cfg["password"]:
+        return JSONResponse({"error": "SMTP not configured"}, status_code=500)
+
+    msg = MIMEMultipart("related")
+    msg["Subject"] = "ScriptPilot 用户反馈"
+    msg["From"] = cfg["user"]
+    msg["To"] = "497269678@qq.com"
+
+    body = f"<p style='white-space:pre-wrap;'>{text}</p>"
+    html_part = MIMEText(f"<html><body>{body}</body></html>", "html", "utf-8")
+    msg.attach(html_part)
+
+    for img in images:
+        if img.content_type and img.content_type.startswith("image/"):
+            data = await img.read()
+            part = MIMEImage(data)
+            part.add_header("Content-ID", f"<{img.filename}>")
+            part.add_header("Content-Disposition", "attachment", filename=img.filename)
+            msg.attach(part)
+
+    try:
+        with smtplib.SMTP_SSL(cfg["host"], cfg["port"]) as server:
+            server.login(cfg["user"], cfg["password"])
+            server.send_message(msg)
+        return {"status": "ok"}
+    except Exception as e:
+        logging.getLogger("scriptpilot").error("Feedback email failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 static_dir = Path(__file__).parent / "static"
