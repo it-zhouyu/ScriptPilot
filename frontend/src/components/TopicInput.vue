@@ -5,6 +5,7 @@ const emit = defineEmits(['submit'])
 
 const topic = ref('')
 const isFocused = ref(false)
+const textareaRef = ref(null)
 
 const suggestions = [
   'AI在教育领域的应用',
@@ -21,6 +22,7 @@ function handleSubmit() {
 
 function useSuggestion(text) {
   topic.value = text
+  textareaRef.value?.focus()
 }
 </script>
 
@@ -46,6 +48,7 @@ function useSuggestion(text) {
         "
       >
         <textarea
+          ref="textareaRef"
           v-model="topic"
           @focus="isFocused = true"
           @blur="isFocused = false"

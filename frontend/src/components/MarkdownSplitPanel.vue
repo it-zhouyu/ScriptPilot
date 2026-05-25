@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import ThinkingIndicator from './ThinkingIndicator.vue'
 import '../assets/prose.css'
 
 const props = defineProps({
@@ -12,11 +14,10 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const textareaRef = ref(null)
-const thinkingEl = ref(null)
 
 const renderedHtml = computed(() => {
   if (!props.modelValue) return ''
-  return marked.parse(props.modelValue, { breaks: true })
+  return DOMPurify.sanitize(marked.parse(props.modelValue, { breaks: true }))
 })
 
 function onInput(e) {
@@ -30,31 +31,10 @@ watch(() => props.modelValue, () => {
     })
   }
 })
-
-watch(() => props.thinking, () => {
-  if (thinkingEl.value) {
-    nextTick(() => {
-      thinkingEl.value.scrollTop = thinkingEl.value.scrollHeight
-    })
-  }
-})
 </script>
 
 <template>
-  <!-- Thinking phase -->
-  <div v-if="status === 'running' && !modelValue" class="flex items-center justify-center" style="height: calc(100vh - 120px)">
-    <div class="flex flex-col items-center w-full max-w-2xl">
-      <div class="flex items-center gap-2 mb-3">
-        <div class="flex gap-1">
-          <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-          <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-          <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-        </div>
-        <span class="text-sm text-fg-secondary">思考中</span>
-      </div>
-      <div ref="thinkingEl" class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ thinking }}</div>
-    </div>
-  </div>
+  <ThinkingIndicator v-if="status === 'running' && !modelValue" :thinking="thinking" />
 
   <!-- Split panel -->
   <div v-else-if="modelValue" class="flex gap-4" style="height: calc(100vh - 120px)">

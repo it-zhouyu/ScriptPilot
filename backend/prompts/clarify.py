@@ -11,7 +11,7 @@ clarify_prompt = ChatPromptTemplate.from_messages([
 
 第二步：分析写完后，另起一行输出 ```json 和 ``` 包裹的 JSON，只包含方向标题：
 ```json
-{{"options": [{{"id": "1", "title": "方向标题"}}, {{""id": "2", "title": "方向标题"}}, {{""id": "3", "title": "方向标题"}}]}}
+{{"options": [{{"id": "1", "title": "方向标题"}}, {{"id": "2", "title": "方向标题"}}, {{"id": "3", "title": "方向标题"}}]}}
 ```
 
 示例输出：

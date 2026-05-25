@@ -39,25 +39,13 @@ async def run_pipeline_streaming(topic: str, direction: str = "", research: str 
 
     logger.info("Pipeline started | topic: %s | direction: %s", topic, direction or "(none)")
 
+    prefill = {"research": research, "outline": outline, "content": content}
+
     for stage_name in STAGES:
-        # Skip research if pre-selected content provided
-        if stage_name == "research" and research:
-            state["research"] = research
-            logger.info("[research] skipped (using pre-selected content) | %d chars", len(research))
-            yield {"event": "stage", "data": json.dumps({"stage": "research", "status": "completed"})}
-            continue
-
-        # Skip outline/content if pre-filled (edited by user)
-        if stage_name == "outline" and outline:
-            state["outline"] = outline
-            logger.info("[outline] skipped (using edited content) | %d chars", len(outline))
-            yield {"event": "stage", "data": json.dumps({"stage": "outline", "status": "completed"})}
-            continue
-
-        if stage_name == "content" and content:
-            state["content"] = content
-            logger.info("[content] skipped (using edited content) | %d chars", len(content))
-            yield {"event": "stage", "data": json.dumps({"stage": "content", "status": "completed"})}
+        if prefill.get(stage_name):
+            state[stage_name] = prefill[stage_name]
+            logger.info("[%s] skipped (using pre-filled content) | %d chars", stage_name, len(prefill[stage_name]))
+            yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "completed"})}
             continue
 
         start = time.time()

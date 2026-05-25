@@ -10,7 +10,7 @@ _api_key = os.getenv("DEEPSEEK_API_KEY", "")
 
 def get_llm():
     return ChatDeepSeek(
-        model="deepseek-v4-pro",
+        model="deepseek-v4-flash",
         api_key=_api_key,
         streaming=True,
         reasoning_effort="high",
