@@ -8,4 +8,5 @@ class PipelineState(TypedDict):
     outline: str
     content: str
     script: str
+    style: str
     current_stage: str

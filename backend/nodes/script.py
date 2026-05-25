@@ -9,5 +9,6 @@ async def stream_script(state: PipelineState):
     async for item in stream_chain(chain, {
         "direction": state.get("direction", ""),
         "content": state["content"],
+        "style": state.get("style", ""),
     }):
         yield item

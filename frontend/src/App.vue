@@ -22,6 +22,12 @@ const userNavigated = ref(false)
 const errorMessage = ref('')
 const pendingDirection = ref(null)
 
+const styleOptions = ref([])
+const selectedStyle = ref(null)
+const pendingStyle = ref(null)
+const styleThinking = ref('')
+const styleContent = ref('')
+
 const clarifyContent = ref('')
 
 const researchResults = ref([])
@@ -34,6 +40,7 @@ const stages = reactive({
   outline:   { status: 'waiting', content: '', thinking: '' },
   content:   { status: 'waiting', content: '', thinking: '' },
   script:    { status: 'waiting', content: '', thinking: '' },
+  style:     { status: 'waiting', content: '', thinking: '' },
 })
 
 const editedContent = reactive({
@@ -59,12 +66,13 @@ function renderMarkdown(text) {
 const renderedClarifyHtml = computed(() => renderMarkdown(clarifyContent.value))
 const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
 
-const stageOrder = ['research', 'outline', 'content', 'script']
-const editableStages = computed(() => stageOrder.filter(s => s !== 'research'))
+const stageOrder = ['research', 'outline', 'content', 'style', 'script']
+const editableStages = computed(() => stageOrder.filter(s => s !== 'research' && s !== 'style'))
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '文章大纲',   icon: 'list' },
   content:   { label: '正文撰写',   icon: 'edit' },
+  style:     { label: '口播风格',   icon: 'palette' },
   script:    { label: '口播稿转换', icon: 'mic' },
 }
 
@@ -88,6 +96,7 @@ function getDirectionStatus() {
 
 function isItemViewable(key) {
   if (key === 'direction') return options.value.length > 0
+  if (key === 'style') return styleOptions.value.length > 0 || stages.style.status === 'running'
   if (key === 'research') return researchResults.value.length > 0 || stages.research.status === 'running' || researchConfirmed.value
   return stages[key].content !== '' || stages[key].thinking !== '' || stages[key].status === 'running'
 }
@@ -186,6 +195,7 @@ async function handleDirectionSelect(opt) {
   stages.research = { status: 'running', content: '', thinking: '' }
   stages.outline = { status: 'waiting', content: '', thinking: '' }
   stages.content = { status: 'waiting', content: '', thinking: '' }
+  stages.style = { status: 'waiting', content: '', thinking: '' }
   stages.script = { status: 'waiting', content: '', thinking: '' }
 
   const directionText = `${topic.value} — ${opt.title}`
@@ -258,8 +268,48 @@ function continueToContent() {
 
 function continueToScript() {
   editedContent.content = editedContent.content || stages.content.content
+  currentStage.value = 'style'
+  stages.style.status = 'running'
+  activeView.value = 'style'
+  userNavigated.value = false
+  styleThinking.value = ''
+  styleContent.value = ''
+  styleOptions.value = []
+  selectedStyle.value = null
+  pendingStyle.value = null
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+  fetchSSE('/api/style', {
+    direction: directionText,
+    content: editedContent.content,
+  }, {
+    onThinking(data) {
+      styleThinking.value += data.thinking || data.token || ''
+    },
+    onToken(data) {
+      styleContent.value += data.token || ''
+      stages.style.content = styleContent.value
+    },
+    onOptions(data) {
+      styleOptions.value = data.options || []
+      stages.style.status = 'waiting'
+      currentStage.value = null
+    },
+    onStage(data) {
+      if (data.stage === 'style') {
+        stages.style.status = data.status === 'completed' ? 'completed' : data.status
+      }
+    },
+    onError(err) { handleGenerateError(err) },
+  })
+}
+
+async function handleStyleSelect(opt) {
+  selectedStyle.value = opt
+  pendingStyle.value = null
   currentStage.value = 'script'
   stages.script.status = 'running'
+  activeView.value = 'script'
   userNavigated.value = false
 
   const directionText = `${topic.value} — ${selectedDirection.value.title}`
@@ -267,6 +317,7 @@ function continueToScript() {
     topic: topic.value,
     direction: directionText,
     content: editedContent.content,
+    style: opt.title,
   }, {
     onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null; phase.value = 'done' } },
     onToken(data) { stages[data.stage].content += data.token },
@@ -312,6 +363,11 @@ function reset() {
   clarifyContent.value = ''
   errorMessage.value = ''
   pendingDirection.value = null
+  styleOptions.value = []
+  selectedStyle.value = null
+  pendingStyle.value = null
+  styleThinking.value = ''
+  styleContent.value = ''
   researchResults.value = []
   selectedResearch.value = new Set()
   researchConfirmed.value = false
@@ -342,6 +398,25 @@ function confirmDirection() {
 
 function changeDirection() {
   pendingDirection.value = null
+}
+
+const confirmStyleBtnRef = ref(null)
+
+function selectStyle(opt) {
+  pendingStyle.value = opt
+  nextTick(() => {
+    confirmStyleBtnRef.value?.focus()
+  })
+}
+
+function confirmStyle() {
+  if (pendingStyle.value) {
+    handleStyleSelect(pendingStyle.value)
+  }
+}
+
+function changeStyle() {
+  pendingStyle.value = null
 }
 
 function retry() {
@@ -570,6 +645,78 @@ async function copyScript() {
           </div>
         </template>
 
+        <!-- ── View: Style Selection ── -->
+        <template v-else-if="activeView === 'style'">
+          <!-- Thinking phase -->
+          <ThinkingIndicator v-if="stages.style.status === 'running' && !styleContent" :thinking="styleThinking" class="animate-fade-in" />
+
+          <!-- Style selection -->
+          <div v-if="styleOptions.length > 0" class="animate-fade-in">
+            <div v-if="styleContent" class="prose-content text-sm text-fg-secondary mb-4" v-html="renderMarkdown(styleContent)"></div>
+
+            <!-- Already confirmed & generating script -->
+            <div v-if="selectedStyle" class="mb-6">
+              <p class="text-xs text-fg-dim mb-3">已选择风格</p>
+              <div class="p-4 rounded-xl bg-accent/5 border border-accent/20">
+                <div class="flex items-center gap-3">
+                  <span class="flex-shrink-0 w-7 h-7 rounded-lg bg-accent text-white flex items-center justify-center text-xs font-bold">
+                    {{ selectedStyle.id }}
+                  </span>
+                  <h4 class="text-sm font-medium text-fg">{{ selectedStyle.title }}</h4>
+                </div>
+              </div>
+            </div>
+
+            <!-- Confirm pending selection -->
+            <div v-else-if="pendingStyle" class="animate-fade-in">
+              <p class="text-xs text-fg-dim mb-3">确认口播风格</p>
+              <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
+                <div class="flex items-center gap-3">
+                  <span class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center text-sm font-bold">
+                    {{ pendingStyle.id }}
+                  </span>
+                  <h4 class="text-base font-semibold text-fg">{{ pendingStyle.title }}</h4>
+                </div>
+              </div>
+              <div class="flex gap-3 mt-5">
+                <button
+                  ref="confirmStyleBtnRef"
+                  @click="confirmStyle"
+                  class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all duration-200 active:scale-95"
+                >
+                  确认
+                </button>
+                <button
+                  @click="changeStyle"
+                  class="px-6 py-2.5 bg-white text-fg-secondary text-sm font-medium rounded-xl border border-border-subtle hover:border-border hover:text-fg transition-all duration-200"
+                >
+                  修改
+                </button>
+              </div>
+            </div>
+
+            <!-- Style cards (selectable) -->
+            <template v-if="!pendingStyle && !selectedStyle">
+              <p class="text-xs text-fg-dim mb-3">选择一个口播风格：</p>
+              <div class="space-y-2">
+                <button
+                  v-for="opt in styleOptions"
+                  :key="opt.id"
+                  @click="selectStyle(opt)"
+                  class="w-full text-left px-4 py-3 rounded-xl border border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group active:scale-[0.98]"
+                >
+                  <div class="flex items-center gap-3">
+                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold bg-accent/15 text-accent-light group-hover:bg-accent group-hover:text-white transition-colors">
+                      {{ opt.id }}
+                    </span>
+                    <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors">{{ opt.title }}</h4>
+                  </div>
+                </button>
+              </div>
+            </template>
+          </div>
+        </template>
+
         <!-- ── View: Pipeline Stage ── -->
         <template v-else>
           <!-- Error banner during pipeline -->
@@ -695,7 +842,7 @@ async function copyScript() {
               </template>
               <template v-if="activeView === 'content' && stages.content.status === 'completed'" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认正文，继续生成口播稿
+                  确认正文，选择口播风格
                 </button>
               </template>
               <template v-if="activeView === 'script' && phase === 'done'" #action>

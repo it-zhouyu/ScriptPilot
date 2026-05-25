@@ -3,6 +3,7 @@ import logging
 from typing import AsyncGenerator
 
 from backend.nodes.clarify import stream_clarify
+from backend.nodes.style import stream_style
 from backend.nodes.outline import stream_outline
 from backend.nodes.content import stream_content
 from backend.nodes.script import stream_script
@@ -20,6 +21,12 @@ STREAM_FNS = {
 async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
     """分析主题，流式输出创作方向。SSE 事件：thinking、token、options、done。"""
     async for event in stream_clarify(topic):
+        yield event
+
+
+async def run_style_streaming(direction: str, content: str) -> AsyncGenerator[dict, None]:
+    """分析文章内容，流式输出口播风格选项。SSE 事件：thinking、token、options、done。"""
+    async for event in stream_style(direction, content):
         yield event
 
 

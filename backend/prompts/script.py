@@ -3,7 +3,10 @@ from langchain_core.prompts import ChatPromptTemplate
 script_prompt = ChatPromptTemplate.from_messages([
     ("system", """你是一位专业的口播稿撰写人。你的任务是将文章内容改写为适合口头播报的稿子。
 
+口播风格：{style}
+
 口播稿要求：
+- 严格按照上述口播风格进行改写
 - 使用口语化表达，自然亲切
 - 句子简短有力，节奏感强
 - 加入自然的过渡语和衔接词
