@@ -625,7 +625,7 @@ async function copyAsSubtitle() {
           <div class="min-w-0">
             <span class="text-sm font-medium truncate block">{{ item.label }}</span>
             <span v-if="item.status === 'running'" class="text-[11px] text-accent/70 block mt-0.5">
-              {{ item.key === 'research' ? '收集中...' : (stages[item.key]?.thinking && !stages[item.key]?.content ? '正在思考...' : '正在生成...') }}
+              {{ item.key === 'research' ? '收集中...' : '正在生成...' }}
             </span>
           </div>
         </button>
