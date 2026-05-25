@@ -15,9 +15,10 @@ const steps = [
 
 const stageLabels = {
   research: '资料收集',
-  outline: '讲解大纲',
-  content: '正文撰写',
-  script: '口播稿转换',
+  style: '口播风格',
+  outline: '口播大纲',
+  script: '口播稿',
+  content: '自媒体文章',
 }
 
 const phaseToStepIndex = computed(() => {

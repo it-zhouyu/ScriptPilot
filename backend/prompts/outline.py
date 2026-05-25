@@ -1,7 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 outline_prompt = ChatPromptTemplate.from_messages([
-    ("system", """你是一位专业的内容策划师。你的任务是基于研究资料，生成一个结构清晰、逻辑严谨的讲解大纲。
+    ("system", """你是一位专业的内容策划师。你的任务是基于研究资料（不一定会提供），生成一个结构清晰、逻辑严谨的讲解大纲。
+
+口播风格：{style}
 
 大纲要求：
 - 包含 3-5 个主要章节
@@ -15,6 +17,7 @@ outline_prompt = ChatPromptTemplate.from_messages([
 - 使用 ## 表示主章节标题
 - 使用 ### 表示子要点标题
 - 使用 - 列表展示子要点详情，用 **加粗** 标注要点名称
-- 保持层级清晰，结构分明"""),
+- 保持层级清晰，结构分明
+- 大纲结构和子要点应符合口播风格的要求"""),
     ("human", "主题方向：{direction}\n\n基于以下研究资料，请生成一个结构清晰的讲解大纲：\n\n{research}"),
 ])

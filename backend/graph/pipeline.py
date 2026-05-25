@@ -24,9 +24,9 @@ async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
         yield event
 
 
-async def run_style_streaming(direction: str, content: str) -> AsyncGenerator[dict, None]:
-    """分析文章内容，流式输出口播风格选项。SSE 事件：thinking、token、options、done。"""
-    async for event in stream_style(direction, content):
+async def run_style_streaming(topic: str, direction: str) -> AsyncGenerator[dict, None]:
+    """分析主题方向，流式输出口播风格选项。SSE 事件：thinking、token、options、done。"""
+    async for event in stream_style(topic, direction):
         yield event
 
 

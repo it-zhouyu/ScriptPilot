@@ -2,7 +2,6 @@ import json
 import logging
 import re
 
-from backend.config import get_llm
 from backend.prompts.style import style_prompt
 from backend.nodes.utils import stream_chain
 
@@ -24,15 +23,14 @@ def _extract_options(full_text):
     return None
 
 
-async def stream_style(direction: str, content: str):
+async def stream_style(topic: str, direction: str):
     logger.info("[style] started")
     yield {"event": "stage", "data": json.dumps({"stage": "style", "status": "running"})}
 
-    chain = style_prompt | get_llm()
     full_text = ""
     json_block_started = False
 
-    async for item_type, text in stream_chain(chain, {"direction": direction, "content": content}):
+    async for item_type, text in stream_chain(style_prompt, {"topic": topic, "direction": direction}):
         if item_type == "thinking":
             yield {"event": "thinking", "data": json.dumps({"stage": "style", "token": text})}
         else:

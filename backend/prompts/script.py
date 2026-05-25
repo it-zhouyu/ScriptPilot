@@ -1,12 +1,12 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 script_prompt = ChatPromptTemplate.from_messages([
-    ("system", """你是一位专业的口播稿撰写人。你的任务是将文章内容改写为适合口头播报的稿子。
+    ("system", """你是一位专业的口播稿撰写人。你的任务是基于讲解大纲，撰写一份适合视频口播的稿件，包含字幕和语气提示。
 
 口播风格：{style}
 
 口播稿要求：
-- 严格按照上述口播风格进行改写
+- 严格按照上述口播风格进行创作
 - 使用口语化表达，自然亲切
 - 句子简短有力，节奏感强
 - 加入自然的过渡语和衔接词
@@ -21,5 +21,5 @@ script_prompt = ChatPromptTemplate.from_messages([
 - 关键金句或数据用 **加粗** 突出
 - 过渡语和互动表达用 *斜体* 区分
 - 段落之间空一行"""),
-    ("human", "创作方向：{direction}\n\n请将以下文章内容改写为口播稿：\n\n{content}"),
+    ("human", "创作方向：{direction}\n\n请基于以下大纲撰写字幕版口播稿：\n\n{outline}"),
 ])

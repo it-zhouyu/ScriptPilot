@@ -31,9 +31,10 @@ const styleContent = ref('')
 const clarifyContent = ref('')
 
 const researchEnabled = ref(true)
+const contentEnabled = ref(true)
 const stageOrder = computed(() => {
-  const all = ['research', 'outline', 'content', 'style', 'script']
-  return researchEnabled.value ? all : all.filter(s => s !== 'research')
+  const all = ['research', 'style', 'outline', 'script', 'content']
+  return all.filter(s => (s === 'research' ? researchEnabled.value : s === 'content' ? contentEnabled.value : true))
 })
 
 const researchResults = ref([])
@@ -76,9 +77,9 @@ const editableStages = computed(() => stageOrder.value.filter(s => s !== 'resear
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '讲解大纲',   icon: 'list' },
-  content:   { label: '正文撰写',   icon: 'edit' },
+  content:   { label: '自媒体文章',   icon: 'edit' },
   style:     { label: '口播风格',   icon: 'palette' },
-  script:    { label: '口播稿转换', icon: 'mic' },
+  script:    { label: '口播稿', icon: 'mic' },
 }
 
 // ── Sidebar nav items ──────────────────────────────────
@@ -198,20 +199,38 @@ async function handleDirectionSelect(opt) {
   const directionText = `${topic.value} — ${opt.title}`
 
   if (!researchEnabled.value) {
-    // 跳过资料收集，直接生成大纲
+    // 跳过资料收集，直接选择口播风格
     phase.value = 'researching'
-    currentStage.value = 'outline'
-    activeView.value = 'outline'
-    stages.outline.status = 'running'
+    currentStage.value = 'style'
+    activeView.value = 'style'
+    stages.style.status = 'running'
+    styleThinking.value = ''
+    styleContent.value = ''
+    styleOptions.value = []
+    selectedStyle.value = null
+    pendingStyle.value = null
 
-    await fetchSSE('/api/outline', {
+    await fetchSSE('/api/style', {
       topic: topic.value,
       direction: directionText,
-      research: '',
     }, {
-      onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
-      onToken(data) { stages[data.stage].content += data.token },
-      onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+      onThinking(data) {
+        styleThinking.value += data.thinking || data.token || ''
+      },
+      onToken(data) {
+        styleContent.value += data.token || ''
+        stages.style.content = styleContent.value
+      },
+      onOptions(data) {
+        styleOptions.value = data.options || []
+        stages.style.status = 'waiting'
+        currentStage.value = null
+      },
+      onStage(data) {
+        if (data.stage === 'style') {
+          stages.style.status = data.status === 'completed' ? 'completed' : data.status
+        }
+      },
       onError(err) { handleGenerateError(err) },
     })
     return
@@ -255,45 +274,6 @@ async function confirmResearch() {
   })
   researchHtml.value = htmlParts.join('')
   researchConfirmed.value = true
-  currentStage.value = 'outline'
-  stages.outline.status = 'running'
-  userNavigated.value = false
-
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
-  await fetchSSE('/api/outline', {
-    topic: topic.value,
-    direction: directionText,
-    research: researchHtml.value,
-  }, {
-    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
-    onToken(data) { stages[data.stage].content += data.token },
-    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
-    onError(err) { handleGenerateError(err) },
-  })
-}
-
-function continueToContent() {
-  editedContent.outline = editedContent.outline || stages.outline.content
-  currentStage.value = 'content'
-  stages.content.status = 'running'
-  userNavigated.value = false
-
-  const directionText = `${topic.value} — ${selectedDirection.value.title}`
-  fetchSSE('/api/content', {
-    topic: topic.value,
-    direction: directionText,
-    research: researchHtml.value,
-    outline: editedContent.outline,
-  }, {
-    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
-    onToken(data) { stages[data.stage].content += data.token },
-    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
-    onError(err) { handleGenerateError(err) },
-  })
-}
-
-function continueToScript() {
-  editedContent.content = editedContent.content || stages.content.content
   currentStage.value = 'style'
   stages.style.status = 'running'
   activeView.value = 'style'
@@ -305,9 +285,9 @@ function continueToScript() {
   pendingStyle.value = null
 
   const directionText = `${topic.value} — ${selectedDirection.value.title}`
-  fetchSSE('/api/style', {
+  await fetchSSE('/api/style', {
+    topic: topic.value,
     direction: directionText,
-    content: editedContent.content,
   }, {
     onThinking(data) {
       styleThinking.value += data.thinking || data.token || ''
@@ -330,23 +310,65 @@ function continueToScript() {
   })
 }
 
-async function handleStyleSelect(opt) {
-  selectedStyle.value = opt
-  pendingStyle.value = null
-  stages.style.status = 'completed'
+function continueToContent() {
+  editedContent.script = editedContent.script || stages.script.content
+  currentStage.value = 'content'
+  stages.content.status = 'running'
+  userNavigated.value = false
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+  fetchSSE('/api/content', {
+    topic: topic.value,
+    direction: directionText,
+    research: researchHtml.value,
+    outline: editedContent.outline,
+    script: editedContent.script,
+    style: selectedStyle.value?.title || '',
+  }, {
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null; phase.value = 'done' } },
+    onToken(data) { stages[data.stage].content += data.token },
+    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+    onError(err) { handleGenerateError(err) },
+  })
+}
+
+function continueToScript() {
+  editedContent.outline = editedContent.outline || stages.outline.content
   currentStage.value = 'script'
   stages.script.status = 'running'
-  activeView.value = 'script'
   userNavigated.value = false
 
   const directionText = `${topic.value} — ${selectedDirection.value.title}`
   fetchSSE('/api/script', {
     topic: topic.value,
     direction: directionText,
-    content: editedContent.content,
+    outline: editedContent.outline,
+    style: selectedStyle.value?.title || '',
+  }, {
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null; if (!contentEnabled.value) phase.value = 'done' } },
+    onToken(data) { stages[data.stage].content += data.token },
+    onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
+    onError(err) { handleGenerateError(err) },
+  })
+}
+
+async function handleStyleSelect(opt) {
+  selectedStyle.value = opt
+  pendingStyle.value = null
+  stages.style.status = 'completed'
+  currentStage.value = 'outline'
+  stages.outline.status = 'running'
+  activeView.value = 'outline'
+  userNavigated.value = false
+
+  const directionText = `${topic.value} — ${selectedDirection.value.title}`
+  fetchSSE('/api/outline', {
+    topic: topic.value,
+    direction: directionText,
+    research: researchHtml.value,
     style: opt.title,
   }, {
-    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null; phase.value = 'done' } },
+    onStage(data) { if (data.status === 'completed') { stages[data.stage].status = 'completed'; currentStage.value = null } },
     onToken(data) { stages[data.stage].content += data.token },
     onThinking(data) { stages[data.stage].thinking += data.thinking || data.token || '' },
     onError(err) { handleGenerateError(err) },
@@ -455,7 +477,9 @@ function retry() {
 }
 
 async function copyScript() {
-  const text = editedContent.script || stages.script.content
+  const text = contentEnabled.value
+    ? (editedContent.content || stages.content.content)
+    : (editedContent.script || stages.script.content)
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -475,6 +499,7 @@ async function copyScript() {
     if (res.ok) {
       const cfg = await res.json()
       researchEnabled.value = cfg.researchEnabled ?? true
+      contentEnabled.value = cfg.contentEnabled ?? true
     }
   } catch { /* use defaults */ }
 })()
@@ -688,6 +713,11 @@ async function copyScript() {
           <!-- Thinking phase -->
           <ThinkingIndicator v-if="stages.style.status === 'running' && !styleContent" :thinking="styleThinking" class="animate-fade-in" />
 
+          <!-- Streaming LLM output -->
+          <div v-if="styleContent && !styleOptions.length" class="animate-fade-in">
+            <div class="prose-content text-sm text-fg-secondary" v-html="renderMarkdown(styleContent)"></div>
+          </div>
+
           <!-- Style selection -->
           <div v-if="styleOptions.length > 0" class="animate-fade-in">
             <div v-if="styleContent" class="prose-content text-sm text-fg-secondary mb-4" v-html="renderMarkdown(styleContent)"></div>
@@ -874,21 +904,27 @@ async function copyScript() {
               :thinking="stages[activeView]?.thinking"
             >
               <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
-                <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   确认大纲，继续生成讲解
                 </button>
               </template>
-              <template v-if="activeView === 'content' && stages.content.status === 'completed'" #action>
-                <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认正文，选择口播风格
+              <template v-if="activeView === 'script' && stages.script.status === 'completed'" #action>
+                <button v-if="contentEnabled" @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                  确认口播稿，继续生成文章
                 </button>
-              </template>
-              <template v-if="activeView === 'script' && phase === 'done'" #action>
-                <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                <button v-else @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                   复制口播稿
+                </button>
+              </template>
+              <template v-if="activeView === 'content' && phase === 'done'" #action>
+                <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  复制文章
                 </button>
               </template>
             </MarkdownSplitPanel>

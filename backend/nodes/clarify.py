@@ -2,7 +2,6 @@ import json
 import logging
 import re
 
-from backend.config import get_llm
 from backend.prompts.clarify import clarify_prompt
 from backend.nodes.utils import stream_chain
 
@@ -28,11 +27,10 @@ async def stream_clarify(topic: str):
     logger.info("[clarify] started | topic: %s", topic)
     yield {"event": "stage", "data": json.dumps({"stage": "clarify", "status": "running"})}
 
-    chain = clarify_prompt | get_llm()
     full_text = ""
     json_block_started = False
 
-    async for item_type, text in stream_chain(chain, {"topic": topic}):
+    async for item_type, text in stream_chain(clarify_prompt, {"topic": topic}):
         if item_type == "thinking":
             yield {"event": "thinking", "data": json.dumps({"stage": "clarify", "token": text})}
         else:

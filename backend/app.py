@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from backend.graph.pipeline import run_clarify_streaming, run_style_streaming, run_stage_streaming
-from backend.config import is_research_enabled
+from backend.config import is_research_enabled, is_content_enabled
 from backend.nodes.research import _build_query, _format_result, _search
 
 app = FastAPI(title="ScriptPilot")
@@ -34,7 +34,7 @@ async def health():
 
 @app.get("/api/config")
 async def config():
-    return {"researchEnabled": is_research_enabled()}
+    return {"researchEnabled": is_research_enabled(), "contentEnabled": is_content_enabled()}
 
 
 # 分析主题，生成创作方向选项
@@ -87,7 +87,7 @@ async def research(request: Request):
 
 
 # 生成讲解大纲
-# 入参：topic（主题）、direction（创作方向）、research（选中的资料 HTML）
+# 入参：topic（主题）、direction（创作方向）、research（选中的资料 HTML）、style（口播风格）
 # SSE 事件：stage/status、thinking、token、done
 @app.post("/api/outline")
 async def outline(request: Request):
@@ -95,10 +95,11 @@ async def outline(request: Request):
     topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
     research = body.get("research", "").strip()
+    style = body.get("style", "").strip()
     if not topic:
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
-    state = {"topic": topic, "direction": direction, "research": research, "outline": "", "content": "", "script": ""}
+    state = {"topic": topic, "direction": direction, "research": research, "style": style, "outline": "", "content": "", "script": ""}
 
     async def event_generator():
         async for event in run_stage_streaming("outline", state):
@@ -107,26 +108,26 @@ async def outline(request: Request):
     return EventSourceResponse(event_generator())
 
 
-# 分析文章内容，生成口播风格选项
-# 入参：direction（创作方向）、content（正文内容）
+# 分析主题方向，生成口播风格选项
+# 入参：topic（主题）、direction（创作方向）
 # SSE 事件：thinking、token、options、done
 @app.post("/api/style")
 async def style(request: Request):
     body = await request.json()
+    topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
-    content = body.get("content", "").strip()
-    if not content:
-        return JSONResponse({"error": "content is required"}, status_code=400)
+    if not topic:
+        return JSONResponse({"error": "topic is required"}, status_code=400)
 
     async def event_generator():
-        async for event in run_style_streaming(direction, content):
+        async for event in run_style_streaming(topic, direction):
             yield event
 
     return EventSourceResponse(event_generator())
 
 
-# 生成正文
-# 入参：topic（主题）、direction（创作方向）、research（资料）、outline（用户编辑后的大纲）
+# 生成自媒体文章
+# 入参：topic（主题）、direction（创作方向）、research（资料）、outline（用户编辑后的大纲）、script（口播稿）、style（口播风格）
 # SSE 事件：stage/status、thinking、token、done
 @app.post("/api/content")
 async def content(request: Request):
@@ -135,10 +136,12 @@ async def content(request: Request):
     direction = body.get("direction", "").strip()
     research = body.get("research", "").strip()
     outline = body.get("outline", "").strip()
+    script = body.get("script", "").strip()
+    style = body.get("style", "").strip()
     if not topic:
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
-    state = {"topic": topic, "direction": direction, "research": research, "outline": outline, "content": "", "script": ""}
+    state = {"topic": topic, "direction": direction, "research": research, "outline": outline, "script": script, "style": style, "content": ""}
 
     async def event_generator():
         async for event in run_stage_streaming("content", state):
@@ -147,20 +150,20 @@ async def content(request: Request):
     return EventSourceResponse(event_generator())
 
 
-# 生成口播稿
-# 入参：topic（主题）、direction（创作方向）、content（用户编辑后的正文）、style（口播风格）
+# 生成字幕版口播稿
+# 入参：topic（主题）、direction（创作方向）、outline（用户编辑后的大纲）、style（口播风格）
 # SSE 事件：stage/status、thinking、token、done
 @app.post("/api/script")
 async def script(request: Request):
     body = await request.json()
     topic = body.get("topic", "").strip()
     direction = body.get("direction", "").strip()
-    content = body.get("content", "").strip()
+    outline = body.get("outline", "").strip()
     style = body.get("style", "").strip()
     if not topic:
         return JSONResponse({"error": "topic is required"}, status_code=400)
 
-    state = {"topic": topic, "direction": direction, "research": "", "outline": "", "content": content, "script": "", "style": style}
+    state = {"topic": topic, "direction": direction, "research": "", "outline": outline, "content": "", "script": "", "style": style}
 
     async def event_generator():
         async for event in run_stage_streaming("script", state):
