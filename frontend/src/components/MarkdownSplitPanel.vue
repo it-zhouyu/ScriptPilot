@@ -24,7 +24,7 @@ function updateHtml() {
 }
 
 watch(() => props.modelValue, () => {
-  if (props.status === 'running') {
+  if (props.status === 'running' && renderedHtml.value) {
     clearTimeout(renderTimeout)
     renderTimeout = setTimeout(updateHtml, 100)
   } else {
