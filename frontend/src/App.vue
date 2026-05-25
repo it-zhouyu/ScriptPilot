@@ -83,7 +83,7 @@ const renderedStyleHtml = computed(() => renderMarkdown(styleContent.value))
 const editableStages = computed(() => stageOrder.value.filter(s => s !== 'research' && s !== 'style'))
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
-  outline:   { label: '讲解大纲',   icon: 'list' },
+  outline:   { label: '讲解思路',   icon: 'list' },
   content:   { label: '自媒体文章',   icon: 'edit' },
   style:     { label: '口播风格',   icon: 'palette' },
   script:    { label: '口播稿', icon: 'mic' },
@@ -285,7 +285,7 @@ async function confirmResearch() {
 function continueToContent() {
   editedContent.script = editedContent.script || stages.script.content
   currentStage.value = 'content'
-  stages.content.status = 'running'
+  stages.content = { status: 'running', content: '', thinking: '' }
   userNavigated.value = false
 
   fetchSSE('/api/content', {
@@ -303,10 +303,22 @@ function continueToContent() {
   })
 }
 
+function resetDownstream(stageKey) {
+  const idx = stageOrder.value.indexOf(stageKey)
+  if (idx === -1) return
+  for (let i = idx + 1; i < stageOrder.value.length; i++) {
+    const key = stageOrder.value[i]
+    stages[key] = { status: 'waiting', content: '', thinking: '' }
+    if (editedContent[key] !== undefined) editedContent[key] = ''
+  }
+  if (phase.value === 'done') phase.value = 'researching'
+}
+
 function continueToScript() {
   editedContent.outline = editedContent.outline || stages.outline.content
   currentStage.value = 'script'
-  stages.script.status = 'running'
+  stages.script = { status: 'running', content: '', thinking: '' }
+  resetDownstream('script')
   userNavigated.value = false
 
   fetchSSE('/api/script', {
@@ -477,10 +489,16 @@ function retry() {
   }
 }
 
-async function copyScript() {
-  const text = contentEnabled.value
-    ? (editedContent.content || stages.content.content)
-    : (editedContent.script || stages.script.content)
+const toast = ref('')
+
+let toastTimer = null
+function showToast(msg) {
+  toast.value = msg
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = '' }, 1500)
+}
+
+async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -491,6 +509,27 @@ async function copyScript() {
     document.execCommand('copy')
     document.body.removeChild(ta)
   }
+  showToast('已复制到剪贴板')
+}
+
+function stripSubtitle(text) {
+  return text
+    .replace(/^（[^）]*）$\n?/gm, '')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+async function copyScript() {
+  const text = contentEnabled.value
+    ? (editedContent.content || stages.content.content)
+    : (editedContent.script || stages.script.content)
+  await copyToClipboard(text)
+}
+
+async function copyAsSubtitle() {
+  const text = editedContent.script || stages.script.content
+  await copyToClipboard(stripSubtitle(text))
 }
 
 ;(async () => {
@@ -989,27 +1028,37 @@ async function copyScript() {
             >
               <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认大纲，继续生成讲解
+                  确认思路，继续生成讲解
                 </button>
               </template>
               <template v-if="activeView === 'script' && stages.script.status === 'completed'" #action>
-                <button v-if="contentEnabled" @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认口播稿，继续生成文章
-                </button>
-                <button v-else @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  复制口播稿
-                </button>
+                <div class="flex items-center gap-3">
+                  <button v-if="contentEnabled" @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                    确认口播稿，继续生成文章
+                  </button>
+                  <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    复制口播稿
+                  </button>
+                  <button @click="copyAsSubtitle" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                    复制为字幕
+                  </button>
+                </div>
               </template>
-              <template v-if="activeView === 'content' && phase === 'done'" #action>
-                <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  复制文章
-                </button>
+              <template v-if="activeView === 'content' && stages.content.status === 'completed'" #action>
+                <div class="flex items-center gap-3">
+                  <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                    重新生成文章
+                  </button>
+                  <button @click="copyScript" class="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    复制文章
+                  </button>
+                </div>
               </template>
             </MarkdownSplitPanel>
           </div>
@@ -1017,6 +1066,12 @@ async function copyScript() {
 
       </div>
     </main>
+
+    <Transition name="toast">
+      <div v-if="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 px-4 py-2 bg-fg/80 text-white text-sm rounded-lg shadow-lg pointer-events-none">
+        {{ toast }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1028,6 +1083,14 @@ async function copyScript() {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Toast */
+.toast-enter-active { transition: all 0.2s ease-out; }
+.toast-leave-active { transition: all 0.15s ease-in; }
+.toast-enter-from, .toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 
 /* Hide scrollbar for thinking content */
