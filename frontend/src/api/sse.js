@@ -18,7 +18,7 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
   function dispatchEvent(currentEvent, line) {
     if (!line.startsWith('data: ')) return
     let data
-    try { data = JSON.parse(line.slice(6)) } catch { return }
+    try { data = JSON.parse(line.slice(6)) } catch { console.warn('Malformed SSE data:', line); return }
     if (currentEvent === 'stage' && onStage) onStage(data)
     else if (currentEvent === 'token' && onToken) onToken(data)
     else if (currentEvent === 'thinking' && onThinking) onThinking(data)
