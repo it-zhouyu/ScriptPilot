@@ -31,6 +31,7 @@ async def health():
     return {"status": "ok"}
 
 
+# 分析主题，生成创作方向选项
 @app.post("/api/clarify")
 async def clarify(request: Request):
     body = await request.json()
@@ -45,6 +46,7 @@ async def clarify(request: Request):
     return EventSourceResponse(event_generator())
 
 
+# 搜索相关资料，返回资料卡片列表
 @app.post("/api/research")
 async def research(request: Request):
     body = await request.json()
@@ -78,6 +80,9 @@ async def research(request: Request):
     return EventSourceResponse(event_generator())
 
 
+# 生成文章大纲
+# 入参：topic（主题）、direction（创作方向）、research（选中的资料 HTML）
+# SSE 事件：stage/status、thinking、token、done
 @app.post("/api/outline")
 async def outline(request: Request):
     body = await request.json()
@@ -96,6 +101,9 @@ async def outline(request: Request):
     return EventSourceResponse(event_generator())
 
 
+# 生成正文
+# 入参：topic（主题）、direction（创作方向）、research（资料）、outline（用户编辑后的大纲）
+# SSE 事件：stage/status、thinking、token、done
 @app.post("/api/content")
 async def content(request: Request):
     body = await request.json()
@@ -115,6 +123,9 @@ async def content(request: Request):
     return EventSourceResponse(event_generator())
 
 
+# 生成口播稿
+# 入参：topic（主题）、direction（创作方向）、content（用户编辑后的正文）
+# SSE 事件：stage/status、thinking、token、done
 @app.post("/api/script")
 async def script(request: Request):
     body = await request.json()
@@ -133,7 +144,7 @@ async def script(request: Request):
     return EventSourceResponse(event_generator())
 
 
-# Serve Vue build output in production
+# 生产环境：托管 Vue 构建产物
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     from fastapi.staticfiles import StaticFiles

@@ -9,6 +9,7 @@ from backend.nodes.script import stream_script
 
 logger = logging.getLogger("scriptpilot")
 
+# 阶段名 → 对应的流式生成函数
 STREAM_FNS = {
     "outline": stream_outline,
     "content": stream_content,
@@ -17,12 +18,17 @@ STREAM_FNS = {
 
 
 async def run_clarify_streaming(topic: str) -> AsyncGenerator[dict, None]:
+    """分析主题，流式输出创作方向。SSE 事件：thinking、token、options、done。"""
     async for event in stream_clarify(topic):
         yield event
 
 
 async def run_stage_streaming(stage_name: str, state: dict) -> AsyncGenerator[dict, None]:
-    """Run a single pipeline stage, yielding SSE events."""
+    """执行单个创作阶段（大纲/正文/口播稿），流式输出 SSE 事件。
+
+    state 字典包含：topic、direction、research、outline、content、script。
+    每个阶段只读取自己需要的字段，由对应 prompt 决定。
+    """
     logger.info("[%s] started", stage_name)
     yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "running"})}
 
