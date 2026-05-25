@@ -1,10 +1,11 @@
 <script setup>
 import { ref, reactive, computed, nextTick, watch } from 'vue'
 import TopicInput from './components/TopicInput.vue'
-import StageContent from './components/StageContent.vue'
 import MarkdownSplitPanel from './components/MarkdownSplitPanel.vue'
+import ThinkingIndicator from './components/ThinkingIndicator.vue'
 import { fetchSSE } from './api/sse.js'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 // ── State ──────────────────────────────────────────────
 const phase = ref('input')
@@ -27,7 +28,6 @@ const researchResults = ref([])
 const selectedResearch = ref(new Set())
 const researchConfirmed = ref(false)
 const activeResearchIndex = ref(null)
-const analyzeThinkingEl = ref(null)
 
 const stages = reactive({
   research:  { status: 'waiting', content: '', thinking: '' },
@@ -46,14 +46,6 @@ function getStageContent(key) {
   return editedContent[key] || stages[key]?.content || ''
 }
 
-watch(analyzeThinking, () => {
-  if (analyzeThinkingEl.value) {
-    nextTick(() => {
-      analyzeThinkingEl.value.scrollTop = analyzeThinkingEl.value.scrollHeight
-    })
-  }
-})
-
 function renderMarkdown(text) {
   if (!text) return ''
   const cleaned = text
@@ -61,10 +53,11 @@ function renderMarkdown(text) {
     .replace(/```[\s\S]*$/g, '')
     .trim()
   const html = marked.parse(cleaned, { breaks: true })
-  return html.replace(/<p>\s*<\/p>/g, '').replace(/<pre><code>\s*<\/code><\/pre>/g, '')
+  return DOMPurify.sanitize(html.replace(/<p>\s*<\/p>/g, '').replace(/<pre><code>\s*<\/code><\/pre>/g, ''))
 }
 
 const stageOrder = ['research', 'outline', 'content', 'script']
+const editableStages = ['outline', 'content', 'script']
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
   outline:   { label: '文章大纲',   icon: 'list' },
@@ -187,7 +180,6 @@ async function handleDirectionSelect(opt) {
   selectedResearch.value = new Set()
   activeResearchIndex.value = null
 
-  // Reset pipeline stages
   stages.research = { status: 'running', content: '', thinking: '' }
   stages.outline = { status: 'waiting', content: '', thinking: '' }
   stages.content = { status: 'waiting', content: '', thinking: '' }
@@ -223,10 +215,9 @@ async function confirmResearch() {
     if (selectedResearch.value.has(i)) htmlParts.push(r.html)
   })
   researchHtml.value = htmlParts.join('')
-  stages.research.content = researchHtml.value
   researchConfirmed.value = true
   phase.value = 'generating'
-  currentStage.value = null
+  userNavigated.value = false
 
   await runStage({ stopAfter: 'outline' })
 }
@@ -275,11 +266,13 @@ async function runStage({ stopAfter = '' } = {}) {
 
 function continueToContent() {
   editedContent.outline = editedContent.outline || stages.outline.content
+  userNavigated.value = false
   runStage({ stopAfter: 'content' })
 }
 
 function continueToScript() {
   editedContent.content = editedContent.content || stages.content.content
+  userNavigated.value = false
   runStage()
 }
 
@@ -324,8 +317,13 @@ function reset() {
   researchHtml.value = ''
 }
 
+const confirmBtnRef = ref(null)
+
 function selectDirection(opt) {
   pendingDirection.value = opt
+  nextTick(() => {
+    confirmBtnRef.value?.focus()
+  })
 }
 
 function confirmDirection() {
@@ -454,7 +452,7 @@ async function copyScript() {
     <main v-else class="flex-1 h-screen overflow-y-auto" ref="scrollContainer">
       <div :class="activeView === 'research' && !researchConfirmed
         ? 'px-8 py-6 h-full flex flex-col'
-        : ['outline', 'content', 'script'].includes(activeView) && stages[activeView]?.content
+        : editableStages.includes(activeView) && stages[activeView]?.content
           ? 'px-6 py-6 h-full'
           : 'max-w-3xl mx-auto px-6 py-6'">
 
@@ -490,19 +488,7 @@ async function copyScript() {
           </div>
 
           <!-- Analyzing state: thinking phase -->
-          <div v-if="phase === 'analyzing' && !clarifyContent" class="animate-fade-in flex items-center justify-center" style="height: calc(100vh - 120px)">
-            <div class="flex flex-col items-center w-full max-w-2xl">
-              <div class="flex items-center gap-2 mb-3">
-                <div class="flex gap-1">
-                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-                  <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-                </div>
-                <span class="text-sm text-fg-secondary">思考中</span>
-              </div>
-              <div ref="analyzeThinkingEl" class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ analyzeThinking }}</div>
-            </div>
-          </div>
+          <ThinkingIndicator v-if="phase === 'analyzing' && !clarifyContent" :thinking="analyzeThinking" class="animate-fade-in" />
 
           <!-- Analyzing state: streaming LLM output -->
           <div v-if="phase === 'analyzing' && clarifyContent" class="animate-fade-in">
@@ -539,6 +525,7 @@ async function copyScript() {
               </div>
               <div class="flex gap-3 mt-5">
                 <button
+                  ref="confirmBtnRef"
                   @click="confirmDirection"
                   class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all duration-200 active:scale-95"
                 >
@@ -588,20 +575,7 @@ async function copyScript() {
 
           <!-- Research selection view -->
           <div v-if="activeView === 'research' && !researchConfirmed" class="animate-fade-in flex flex-col flex-1 min-h-0">
-            <!-- Loading state: same style as thinking in other stages -->
-            <div v-if="stages.research.status === 'running' && researchResults.length === 0" class="flex items-center justify-center" style="height: calc(100vh - 120px)">
-              <div class="flex flex-col items-center w-full max-w-2xl">
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="flex gap-1">
-                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-                  </div>
-                  <span class="text-sm text-fg-secondary">收集中...</span>
-                </div>
-                <div class="w-full h-64 overflow-y-auto text-sm text-fg-dim leading-relaxed whitespace-pre-wrap scrollbar-hidden">{{ stages.research.thinking }}</div>
-              </div>
-            </div>
+            <ThinkingIndicator v-if="stages.research.status === 'running' && researchResults.length === 0" label="收集中..." :thinking="stages.research.thinking" />
 
             <!-- Results header + split panel -->
             <template v-if="researchResults.length > 0">
@@ -699,29 +673,19 @@ async function copyScript() {
 
           <!-- Regular pipeline stage view -->
           <div v-else :key="activeView" class="animate-fade-in">
-            <!-- Research: use StageContent (HTML) -->
-            <StageContent
-              v-if="activeView === 'research'"
-              :stage-key="activeView"
-              :title="stageMeta[activeView]?.label"
-              :content="stages[activeView]?.content"
-              :thinking="stages[activeView]?.thinking"
-              :status="stages[activeView]?.status"
-            />
             <!-- Outline/Content/Script: split panel editor -->
             <MarkdownSplitPanel
-              v-else
               :model-value="getStageContent(activeView)"
               @update:model-value="(val) => { editedContent[activeView] = val }"
               :status="stages[activeView]?.status"
               :thinking="stages[activeView]?.thinking"
             >
-              <template v-if="activeView === 'outline' && stages.outline.status === 'completed' && phase === 'generating'" #action>
+              <template v-if="activeView === 'outline' && stages.outline.status === 'completed' && ((phase === 'generating' && !currentStage) || phase === 'done')" #action>
                 <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   确认大纲，继续生成正文
                 </button>
               </template>
-              <template v-if="activeView === 'content' && stages.content.status === 'completed' && phase === 'generating'" #action>
+              <template v-if="activeView === 'content' && stages.content.status === 'completed' && ((phase === 'generating' && !currentStage) || phase === 'done')" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
                   确认正文，继续生成口播稿
                 </button>
