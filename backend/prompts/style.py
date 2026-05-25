@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 style_prompt = ChatPromptTemplate.from_messages([
     ("system", """你是一位资深口播稿撰写人和播客制作人。用户想要围绕一个主题创作口播内容，需要先确定口播风格。
 
-请分析主题和创作方向，给出 3 个不同的口播风格选项，让用户选择最适合的呈现方式。
+请根据主题、创作方向和选题分析，给出 3 个不同的口播风格选项，让用户选择最适合的呈现方式。
 
 请按以下格式输出：
 
@@ -18,7 +18,7 @@ style_prompt = ChatPromptTemplate.from_messages([
 
 示例输出：
 
-本文是一篇关于 AI 编程工具的深度分析...
+根据提供的主题和方向，提供以下三种风格进行选择，后续我会根据您选择的风格生成内容。
 
 1. **轻松对话风**
    - 像朋友聊天一样讲述，适合短视频和自媒体
@@ -33,5 +33,5 @@ style_prompt = ChatPromptTemplate.from_messages([
 ```
 
 风格之间要有明显差异，覆盖不同受众和平台场景。严格按上述格式输出。"""),
-    ("human", "主题：{topic}\n创作方向：{direction}"),
+    ("human", "主题：{topic}\n创作方向：{direction}\n\n选题分析：\n{direction_analysis}"),
 ])

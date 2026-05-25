@@ -40,16 +40,27 @@ async def _stream(chain, inputs):
             yield ("content", chunk.content)
 
 
+def _is_retryable_error(err):
+    msg = str(err).lower()
+    return any(kw in msg for kw in ['timeout', 'timed out', '429', 'rate limit', 'overloaded', '503'])
+
+
 async def stream_chain(prompt, inputs):
     try:
         chain = prompt | get_llm()
         async for item in _stream(chain, inputs):
             yield item
     except Exception as e:
-        logger.warning("Primary LLM failed (%s), falling back to ZhiPu GLM", e)
-        chain = prompt | get_fallback_llm()
-        async for item in _stream(chain, inputs):
-            yield item
+        if _is_retryable_error(e):
+            logger.warning("Primary LLM failed (%s), falling back to ZhiPu GLM", e)
+            chain = prompt | get_fallback_llm()
+            async for item in _stream(chain, inputs):
+                yield item
+        else:
+            raise
+
+
+_SINGLE_OPTION = re.compile(r'\{"id"\s*:\s*"[^"]*"\s*,\s*"title"\s*:\s*"[^"]*"\s*\}')
 
 
 async def stream_options_stage(stage_name, prompt, inputs, fallback_options):
@@ -58,6 +69,7 @@ async def stream_options_stage(stage_name, prompt, inputs, fallback_options):
 
     full_text = ""
     json_block_started = False
+    emitted_count = 0
 
     async for item_type, text in stream_chain(prompt, inputs):
         if item_type == "thinking":
@@ -66,16 +78,24 @@ async def stream_options_stage(stage_name, prompt, inputs, fallback_options):
             full_text += text
             if not json_block_started and '```json' in full_text:
                 json_block_started = True
-                continue
             if not json_block_started:
                 yield {"event": "token", "data": json.dumps({"stage": stage_name, "token": text})}
+            else:
+                json_part = full_text[full_text.index('```json') + 7:]
+                for m in _SINGLE_OPTION.finditer(json_part):
+                    end_pos = m.end()
+                    if end_pos <= emitted_count:
+                        continue
+                    try:
+                        opt = json.loads(m.group())
+                        yield {"event": "option", "data": json.dumps(opt)}
+                        emitted_count = end_pos
+                    except json.JSONDecodeError:
+                        continue
 
-    data = extract_options(full_text)
-    if data and "options" in data:
-        logger.info("[%s] completed | %d options generated", stage_name, len(data["options"]))
-        yield {"event": "options", "data": json.dumps(data)}
-    else:
+    if emitted_count == 0:
         logger.warning("[%s] failed to parse options, returning fallback", stage_name)
-        yield {"event": "options", "data": json.dumps({"options": fallback_options})}
+        for opt in fallback_options:
+            yield {"event": "option", "data": json.dumps(opt)}
 
     yield {"event": "stage", "data": json.dumps({"stage": stage_name, "status": "waiting"})}

@@ -9,6 +9,8 @@ async def stream_outline(state: PipelineState):
     inputs = {
         "direction": state.get("direction", ""),
         "style": state.get("style", ""),
+        "direction_analysis": state.get("direction_analysis", ""),
+        "style_analysis": state.get("style_analysis", ""),
         "research_hint": " 可以参考提供的研究资料来丰富内容。" if has_research else "",
         "research_block": "以下是一些相关资料，可以参考：\n\n" + research if has_research else "请直接根据主题方向梳理讲解思路。",
     }

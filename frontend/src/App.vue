@@ -11,7 +11,7 @@ const phase = ref('input')
 
 const topic = ref('')
 const analyzeThinking = ref('')
-const analysis = ref('')
+const directionAnalysis = ref('')
 const options = ref([])
 const selectedDirection = ref(null)
 const currentStage = ref(null)
@@ -77,7 +77,7 @@ const directionText = computed(() =>
 )
 
 const renderedClarifyHtml = computed(() => renderMarkdown(clarifyContent.value))
-const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
+const renderedAnalysisHtml = computed(() => renderMarkdown(directionAnalysis.value))
 const renderedStyleHtml = computed(() => renderMarkdown(styleContent.value))
 
 const editableStages = computed(() => stageOrder.value.filter(s => s !== 'research' && s !== 'style'))
@@ -164,6 +164,7 @@ function fetchStyleOptions() {
   return fetchSSE('/api/style', {
     topic: topic.value,
     direction: directionText.value,
+    directionAnalysis: directionAnalysis.value,
   }, {
     onThinking(data) {
       styleThinking.value += data.thinking || data.token || ''
@@ -172,8 +173,8 @@ function fetchStyleOptions() {
       styleContent.value += data.token || ''
       stages.style.content = styleContent.value
     },
-    onOptions(data) {
-      styleOptions.value = data.options || []
+    onOption(data) {
+      styleOptions.value.push(data)
       stages.style.status = 'waiting'
       currentStage.value = null
     },
@@ -202,9 +203,12 @@ async function handleTopicSubmit(text) {
     onToken(data) {
       clarifyContent.value += data.token || ''
     },
-    onOptions(data) {
-      analysis.value = clarifyContent.value || ''
-      options.value = data.options || []
+    onOption(data) {
+      if (options.value.length === 0) {
+        directionAnalysis.value = clarifyContent.value || ''
+        phase.value = 'select-direction'
+      }
+      options.value.push(data)
     },
     onDone() {
       phase.value = 'select-direction'
@@ -291,6 +295,8 @@ function continueToContent() {
   fetchSSE('/api/content', {
     topic: topic.value,
     direction: directionText.value,
+    directionAnalysis: directionAnalysis.value,
+    styleAnalysis: styleContent.value,
     research: researchHtml.value,
     outline: editedContent.outline,
     script: editedContent.script,
@@ -324,6 +330,8 @@ function continueToScript() {
   fetchSSE('/api/script', {
     topic: topic.value,
     direction: directionText.value,
+    directionAnalysis: directionAnalysis.value,
+    styleAnalysis: styleContent.value,
     outline: editedContent.outline,
     style: selectedStyle.value?.title || '',
   }, {
@@ -346,6 +354,8 @@ async function handleStyleSelect(opt) {
   fetchSSE('/api/outline', {
     topic: topic.value,
     direction: directionText.value,
+    directionAnalysis: directionAnalysis.value,
+    styleAnalysis: styleContent.value,
     research: researchHtml.value,
     style: opt.title,
   }, {
@@ -383,7 +393,7 @@ function toggleAllResearch() {
 function reset() {
   topic.value = ''
   phase.value = 'input'
-  analysis.value = ''
+  directionAnalysis.value = ''
   options.value = []
   selectedDirection.value = null
   currentStage.value = null
@@ -514,7 +524,7 @@ async function copyToClipboard(text) {
 
 function stripSubtitle(text) {
   return text
-    .replace(/^（[^）]*）$\n?/gm, '')
+    .replace(/^\([^)]*\)\s*$/gm, '')
     .replace(/\*\*([^*]*)\*\*/g, '$1')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
@@ -699,7 +709,7 @@ async function copyAsSubtitle() {
 
             <!-- Confirm pending selection -->
             <div v-else-if="pendingDirection" class="animate-fade-in">
-              <p class="text-xs text-fg-dim mb-3">确认创作方向</p>
+              <p class="text-xs text-fg-dim mb-4 mt-6">确认选题</p>
               <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
                 <div class="flex items-center gap-3">
                   <span class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center text-sm font-bold">
@@ -727,32 +737,32 @@ async function copyAsSubtitle() {
 
             <!-- Direction cards (selectable) -->
             <template v-if="phase === 'select-direction' && !pendingDirection && !selectedDirection && !isCustomDirection">
-              <p class="text-xs text-fg-dim mb-3">选择一个创作方向：</p>
-              <div class="space-y-2">
+              <p class="text-xs text-fg-dim mb-4 mt-6">选择一个选题：</p>
+              <div class="grid grid-cols-2 gap-2">
                 <button
                   v-for="opt in options"
                   :key="opt.id"
                   @click="selectDirection(opt)"
-                  class="w-full text-left px-4 py-3 rounded-xl border border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group active:scale-[0.98]"
+                  class="text-left px-3 py-2.5 rounded-xl border border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group active:scale-[0.98]"
                 >
-                  <div class="flex items-center gap-3">
-                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold bg-accent/15 text-accent-light group-hover:bg-accent group-hover:text-white transition-colors">
+                  <div class="flex items-center gap-2">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold bg-accent/15 text-accent-light group-hover:bg-accent group-hover:text-white transition-colors">
                       {{ opt.id }}
                     </span>
-                    <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors">{{ opt.title }}</h4>
+                    <h4 class="text-sm font-medium text-fg group-hover:text-accent-light transition-colors line-clamp-2">{{ opt.title }}</h4>
                   </div>
                 </button>
                 <button
                   @click="useCustomDirection"
-                  class="w-full text-left px-4 py-3 rounded-xl border border-dashed border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group"
+                  class="text-left px-3 py-2.5 rounded-xl border border-dashed border-border-subtle hover:border-accent/40 hover:bg-surface-hover cursor-pointer transition-all duration-200 group"
                 >
-                  <div class="flex items-center gap-3">
-                    <span class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-fg-dim group-hover:text-accent transition-colors">
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <div class="flex items-center gap-2">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-fg-dim group-hover:text-accent transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </span>
-                    <h4 class="text-sm text-fg-dim group-hover:text-accent transition-colors">自己写一个方向</h4>
+                    <h4 class="text-sm text-fg-dim group-hover:text-accent transition-colors">自定义选题</h4>
                   </div>
                 </button>
               </div>
@@ -760,7 +770,7 @@ async function copyAsSubtitle() {
 
             <!-- Custom direction input -->
             <template v-if="phase === 'select-direction' && isCustomDirection && !selectedDirection">
-              <p class="text-xs text-fg-dim mb-3">输入你的创作方向：</p>
+              <p class="text-xs text-fg-dim mb-4 mt-6">输入你的选题：</p>
               <div class="p-4 rounded-xl bg-accent/5 border-2 border-accent/20">
                 <input
                   ref="confirmBtnRef"

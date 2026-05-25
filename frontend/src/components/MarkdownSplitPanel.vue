@@ -14,6 +14,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const textareaRef = ref(null)
+const previewRef = ref(null)
 const renderedHtml = ref('')
 let renderTimeout = null
 
@@ -21,6 +22,11 @@ function updateHtml() {
   renderedHtml.value = props.modelValue
     ? DOMPurify.sanitize(marked.parse(props.modelValue, { breaks: true }))
     : ''
+  if (props.status === 'running') {
+    nextTick(() => {
+      if (previewRef.value) previewRef.value.scrollTop = previewRef.value.scrollHeight
+    })
+  }
 }
 
 watch(() => props.modelValue, () => {
@@ -72,7 +78,7 @@ watch(() => props.modelValue, () => {
       <div class="px-4 py-2.5 border-b border-border-subtle bg-bg-base/40">
         <span class="text-xs font-semibold text-fg-dim tracking-wide uppercase">预览</span>
       </div>
-      <div class="flex-1 overflow-y-auto p-6">
+      <div ref="previewRef" class="flex-1 overflow-y-auto p-6">
         <div class="prose-content" v-html="renderedHtml"></div>
       </div>
     </div>

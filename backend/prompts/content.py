@@ -5,6 +5,12 @@ content_prompt = ChatPromptTemplate.from_messages([
 
 口播风格：{style}
 
+口播风格分析：
+{style_analysis}
+
+选题分析：
+{direction_analysis}
+
 写作要求：
 - 语言流畅自然，论述充分
 - 每个章节展开充分，有理有据

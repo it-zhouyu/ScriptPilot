@@ -5,6 +5,12 @@ outline_prompt = ChatPromptTemplate.from_messages([
 
 口播风格：{style}
 
+口播风格分析：
+{style_analysis}
+
+选题分析：
+{direction_analysis}
+
 讲解思路的核心是告诉用户：
 - 开头怎么切入（用什么钩子吸引注意力）
 - 中间依次讲哪几个要点（每个要点一句话说明讲什么）

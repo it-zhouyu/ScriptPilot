@@ -102,6 +102,8 @@ async def outline(request: Request):
     state = {
         "topic": topic,
         "direction": body.get("direction", "").strip(),
+        "direction_analysis": body.get("directionAnalysis", "").strip(),
+        "style_analysis": body.get("styleAnalysis", "").strip(),
         "research": body.get("research", "").strip(),
         "style": body.get("style", "").strip(),
         "outline": "", "content": "", "script": "",
@@ -116,7 +118,8 @@ async def style(request: Request):
     if err:
         return err
     direction = body.get("direction", "").strip()
-    return _sse(stream_style(topic, direction))
+    direction_analysis = body.get("directionAnalysis", "").strip()
+    return _sse(stream_style(topic, direction, direction_analysis))
 
 
 @app.post("/api/content")
@@ -128,6 +131,8 @@ async def content(request: Request):
     state = {
         "topic": topic,
         "direction": body.get("direction", "").strip(),
+        "direction_analysis": body.get("directionAnalysis", "").strip(),
+        "style_analysis": body.get("styleAnalysis", "").strip(),
         "research": body.get("research", "").strip(),
         "outline": body.get("outline", "").strip(),
         "script": body.get("script", "").strip(),
@@ -146,6 +151,8 @@ async def script(request: Request):
     state = {
         "topic": topic,
         "direction": body.get("direction", "").strip(),
+        "direction_analysis": body.get("directionAnalysis", "").strip(),
+        "style_analysis": body.get("styleAnalysis", "").strip(),
         "research": "",
         "outline": body.get("outline", "").strip(),
         "content": "",

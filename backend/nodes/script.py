@@ -8,5 +8,7 @@ async def stream_script(state: PipelineState):
         "direction": state.get("direction", ""),
         "outline": state["outline"],
         "style": state.get("style", ""),
+        "direction_analysis": state.get("direction_analysis", ""),
+        "style_analysis": state.get("style_analysis", ""),
     }):
         yield item

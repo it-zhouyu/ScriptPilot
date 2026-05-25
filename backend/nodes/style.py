@@ -8,6 +8,6 @@ FALLBACK_OPTIONS = [
 ]
 
 
-async def stream_style(topic: str, direction: str):
-    async for event in stream_options_stage("style", style_prompt, {"topic": topic, "direction": direction}, FALLBACK_OPTIONS):
+async def stream_style(topic: str, direction: str, direction_analysis: str = ""):
+    async for event in stream_options_stage("style", style_prompt, {"topic": topic, "direction": direction, "direction_analysis": direction_analysis}, FALLBACK_OPTIONS):
         yield event

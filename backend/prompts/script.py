@@ -5,6 +5,12 @@ script_prompt = ChatPromptTemplate.from_messages([
 
 口播风格：{style}
 
+口播风格分析：
+{style_analysis}
+
+选题分析：
+{direction_analysis}
+
 口播稿要求：
 - 严格按照上述口播风格进行创作
 - 使用口语化表达，自然亲切
@@ -15,7 +21,7 @@ script_prompt = ChatPromptTemplate.from_messages([
 - 结尾有号召性总结
 
 格式规范（严格遵守）：
-- 语气/情感/动作提示统一用中文括号括起来，单独占一行，如：（兴奋）或（停顿，直视镜头）
+- 语气/情感/动作提示统一用英文括号括起来，单独占一行，如：(兴奋) 或 (停顿，直视镜头)
 - 关键金句或数据用 **加粗** 标注，如：**这是最重要的结论**
 - 不要使用标题（##、###）、分隔线（---）、引用（>）等任何其他 Markdown 语法
 - 不要使用斜体（*）
