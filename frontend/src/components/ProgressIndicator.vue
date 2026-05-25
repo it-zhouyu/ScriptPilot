@@ -15,7 +15,7 @@ const steps = [
 
 const stageLabels = {
   research: '资料收集',
-  outline: '文章大纲',
+  outline: '讲解大纲',
   content: '正文撰写',
   script: '口播稿转换',
 }

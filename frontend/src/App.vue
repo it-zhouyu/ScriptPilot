@@ -75,7 +75,7 @@ const renderedAnalysisHtml = computed(() => renderMarkdown(analysis.value))
 const editableStages = computed(() => stageOrder.value.filter(s => s !== 'research' && s !== 'style'))
 const stageMeta = {
   research:  { label: '资料收集',   icon: 'search' },
-  outline:   { label: '文章大纲',   icon: 'list' },
+  outline:   { label: '讲解大纲',   icon: 'list' },
   content:   { label: '正文撰写',   icon: 'edit' },
   style:     { label: '口播风格',   icon: 'palette' },
   script:    { label: '口播稿转换', icon: 'mic' },
@@ -875,7 +875,7 @@ async function copyScript() {
             >
               <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
                 <button @click="continueToContent" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认大纲，继续生成正文
+                  确认大纲，继续生成讲解
                 </button>
               </template>
               <template v-if="activeView === 'content' && stages.content.status === 'completed'" #action>

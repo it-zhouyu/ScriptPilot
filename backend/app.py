@@ -86,7 +86,7 @@ async def research(request: Request):
     return EventSourceResponse(event_generator())
 
 
-# 生成文章大纲
+# 生成讲解大纲
 # 入参：topic（主题）、direction（创作方向）、research（选中的资料 HTML）
 # SSE 事件：stage/status、thinking、token、done
 @app.post("/api/outline")
