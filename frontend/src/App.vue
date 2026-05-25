@@ -1028,7 +1028,7 @@ async function copyAsSubtitle() {
             >
               <template v-if="activeView === 'outline' && stages.outline.status === 'completed'" #action>
                 <button @click="continueToScript" class="px-6 py-2.5 bg-accent text-white text-sm font-medium rounded-xl hover:bg-accent-light transition-all active:scale-[0.98]">
-                  确认思路，继续生成讲解
+                  确认思路，继续生成口播稿
                 </button>
               </template>
               <template v-if="activeView === 'script' && stages.script.status === 'completed'" #action>

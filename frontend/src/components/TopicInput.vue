@@ -7,22 +7,10 @@ const topic = ref('')
 const isFocused = ref(false)
 const textareaRef = ref(null)
 
-const suggestions = [
-  'AI在教育领域的应用',
-  '电商直播带货技巧',
-  '个人IP打造指南',
-  '职场沟通的艺术',
-]
-
 function handleSubmit() {
   if (topic.value.trim()) {
     emit('submit', topic.value.trim())
   }
-}
-
-function useSuggestion(text) {
-  topic.value = text
-  textareaRef.value?.focus()
 }
 </script>
 
@@ -53,7 +41,7 @@ function useSuggestion(text) {
           @focus="isFocused = true"
           @blur="isFocused = false"
           @keydown.enter.exact.prevent="handleSubmit"
-          placeholder="例如：人工智能在教育领域的应用..."
+          placeholder="请输入你想要创作的主题"
           rows="3"
           class="w-full bg-transparent text-fg placeholder-fg-dim px-5 pt-4 pb-14 text-base leading-relaxed resize-none focus:outline-none rounded-2xl"
         ></textarea>
@@ -73,18 +61,6 @@ function useSuggestion(text) {
         </div>
       </div>
 
-      <!-- Suggestions -->
-      <div class="mt-5 flex flex-wrap justify-center gap-2">
-        <button
-          v-for="s in suggestions"
-          :key="s"
-          @click="useSuggestion(s)"
-          class="px-3 py-1.5 text-xs text-fg-secondary bg-surface rounded-lg border border-border-subtle
-                 hover:border-accent/30 hover:text-accent-light transition-all duration-200"
-        >
-          {{ s }}
-        </button>
-      </div>
     </div>
   </div>
 </template>
