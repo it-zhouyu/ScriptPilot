@@ -554,10 +554,10 @@ async function copyAsSubtitle() {
       <!-- Brand -->
       <div class="px-5 pt-5 pb-4 border-b border-border-subtle">
         <div class="flex items-center justify-between">
-          <h1 class="text-base font-bold text-fg tracking-tight">ScriptPilot</h1>
+          <h1 class="text-base font-bold text-fg tracking-tight font-display">ScriptPilot</h1>
           <button
             @click="reset"
-            class="p-1.5 rounded-lg text-fg-dim hover:text-fg-secondary hover:bg-surface-hover transition-colors"
+            class="p-1.5 rounded-lg text-fg-dim hover:text-fg-secondary hover:bg-surface-hover transition-all duration-200"
             title="新主题"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1068,7 +1068,7 @@ async function copyAsSubtitle() {
     </main>
 
     <Transition name="toast">
-      <div v-if="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 px-4 py-2 bg-fg/80 text-white text-sm rounded-lg shadow-lg pointer-events-none">
+      <div v-if="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-fg/85 text-white text-sm font-medium rounded-xl shadow-lg shadow-fg/10 pointer-events-none backdrop-blur-sm">
         {{ toast }}
       </div>
     </Transition>
@@ -1078,19 +1078,35 @@ async function copyAsSubtitle() {
 <style>
 /* Fade in animation */
 .animate-fade-in {
-  animation: fadeIn 0.25s ease-out;
+  animation: fadeIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Floating background orbs */
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -25px) scale(1.05); }
+  66% { transform: translate(-15px, 15px) scale(0.97); }
+}
+.animate-float {
+  animation: float 12s ease-in-out infinite;
+}
+.animate-float-delayed {
+  animation: float 15s ease-in-out 3s infinite;
+}
+.animate-float-slow {
+  animation: float 18s ease-in-out 6s infinite;
+}
+
 /* Toast */
-.toast-enter-active { transition: all 0.2s ease-out; }
-.toast-leave-active { transition: all 0.15s ease-in; }
+.toast-enter-active { transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.toast-leave-active { transition: all 0.2s ease-in; }
 .toast-enter-from, .toast-leave-to {
   opacity: 0;
-  transform: translate(-50%, 8px);
+  transform: translate(-50%, 12px);
 }
 
 /* Hide scrollbar for thinking content */
@@ -1104,16 +1120,16 @@ async function copyAsSubtitle() {
 
 /* Custom scrollbar */
 .overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .overflow-y-auto::-webkit-scrollbar-track {
   background: transparent;
 }
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
+  background: rgba(44, 32, 20, 0.08);
+  border-radius: 10px;
 }
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(44, 32, 20, 0.15);
 }
 </style>

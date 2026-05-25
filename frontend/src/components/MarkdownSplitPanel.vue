@@ -51,10 +51,10 @@ watch(() => props.modelValue, () => {
   <!-- Split panel -->
   <div v-else-if="modelValue" class="flex gap-4" style="height: calc(100vh - 120px)">
     <!-- Left: markdown source -->
-    <div class="w-1/2 flex flex-col border border-border-subtle rounded-2xl overflow-hidden bg-white">
-      <div class="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle bg-bg-base/50">
-        <span class="text-xs font-medium text-fg-dim">Markdown</span>
-        <span v-if="status === 'completed'" class="text-[11px] text-accent/70">可编辑</span>
+    <div class="w-1/2 flex flex-col border border-border-subtle rounded-2xl overflow-hidden bg-white shadow-sm">
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle bg-bg-base/40">
+        <span class="text-xs font-semibold text-fg-dim tracking-wide uppercase">Markdown</span>
+        <span v-if="status === 'completed'" class="text-[11px] text-accent font-medium">可编辑</span>
       </div>
       <textarea
         ref="textareaRef"
@@ -62,15 +62,15 @@ watch(() => props.modelValue, () => {
         @input="onInput"
         :readonly="status === 'running'"
         class="flex-1 w-full p-4 text-sm font-mono leading-relaxed resize-none focus:outline-none text-fg"
-        :class="{ 'bg-gray-50': status === 'running' }"
+        :class="{ 'bg-bg-base/30': status === 'running' }"
         spellcheck="false"
       />
     </div>
 
     <!-- Right: rendered preview -->
-    <div class="w-1/2 flex flex-col border border-border-subtle rounded-2xl overflow-hidden bg-white">
-      <div class="px-4 py-2.5 border-b border-border-subtle bg-bg-base/50">
-        <span class="text-xs font-medium text-fg-dim">预览</span>
+    <div class="w-1/2 flex flex-col border border-border-subtle rounded-2xl overflow-hidden bg-white shadow-sm">
+      <div class="px-4 py-2.5 border-b border-border-subtle bg-bg-base/40">
+        <span class="text-xs font-semibold text-fg-dim tracking-wide uppercase">预览</span>
       </div>
       <div class="flex-1 overflow-y-auto p-6">
         <div class="prose-content" v-html="renderedHtml"></div>
