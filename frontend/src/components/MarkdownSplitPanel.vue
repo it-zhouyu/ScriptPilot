@@ -18,35 +18,34 @@ const textareaRef = ref(null)
 const previewRef = ref(null)
 const renderedHtml = ref('')
 const isEditing = ref(false)
-let renderTimeout = null
+let rafPending = false
 
 function updateHtml() {
   renderedHtml.value = props.modelValue
     ? DOMPurify.sanitize(marked.parse(props.modelValue, { breaks: true }))
     : ''
-  if (props.status === 'running') {
-    nextTick(() => {
-      if (previewRef.value) previewRef.value.scrollTop = previewRef.value.scrollHeight
-    })
-  }
+}
+
+function scheduleScroll(el) {
+  if (!el || rafPending) return
+  rafPending = true
+  requestAnimationFrame(() => {
+    el.scrollTop = el.scrollHeight
+    rafPending = false
+  })
 }
 
 watch(() => props.modelValue, () => {
-  if (props.status === 'running' && renderedHtml.value) {
-    clearTimeout(renderTimeout)
-    renderTimeout = setTimeout(updateHtml, 100)
-  } else {
-    updateHtml()
-  }
-  if (props.status === 'running' && textareaRef.value) {
-    nextTick(() => {
-      textareaRef.value.scrollTop = textareaRef.value.scrollHeight
-    })
+  updateHtml()
+  if (props.status === 'running') {
+    scheduleScroll(previewRef.value)
+    scheduleScroll(textareaRef.value)
   }
 }, { immediate: true })
 
 watch(() => props.status, (s) => {
   if (s === 'running') isEditing.value = false
+  if (s === 'completed') updateHtml()
 })
 
 function onInput(e) {
