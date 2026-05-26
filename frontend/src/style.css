@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  ::selection {
+    background: rgba(199, 88, 50, 0.15);
+    color: #2A2017;
+  }
+
+  body {
+    @apply bg-bg-base text-fg font-sans min-h-screen antialiased;
+  }
+}

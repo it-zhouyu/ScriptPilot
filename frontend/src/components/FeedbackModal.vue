@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import SupportPanel from './SupportPanel.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -63,7 +64,7 @@ function close() {
     <Transition name="fade">
       <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40" @click="close"></div>
-        <div class="relative w-full max-w-4xl min-h-[520px] max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+        <div class="relative w-full max-w-4xl min-h-[520px] max-h-[90vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden animate-fade-in">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
             <h3 class="text-base font-semibold text-fg">帮ScriptPilot变得更好</h3>
@@ -77,21 +78,25 @@ function close() {
           <!-- Body -->
           <div class="flex-1 overflow-y-auto">
             <!-- Success state -->
-            <div v-if="done" class="text-center py-12">
-              <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-green-50 flex items-center justify-center">
-                <svg class="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
+            <div v-if="done" class="grid grid-cols-1 md:grid-cols-[0.9fr_1fr] divide-y md:divide-y-0 md:divide-x divide-border-subtle">
+              <div class="px-6 py-10 text-center flex flex-col justify-center">
+                <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-green-50 flex items-center justify-center">
+                  <svg class="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p class="text-base text-fg font-semibold">感谢您的反馈！</p>
+                <p class="text-sm text-fg-secondary mt-2 leading-relaxed">我们会认真对待每一条建议，也欢迎继续支持 ScriptPilot 的长期维护。</p>
               </div>
-              <p class="text-sm text-fg font-medium">感谢您的反馈！</p>
-              <p class="text-xs text-fg-dim mt-1">我们会认真对待每一条建议</p>
+              <div class="px-6 py-5 bg-bg-base/35">
+                <SupportPanel />
+              </div>
             </div>
 
-            <!-- Two column layout -->
+            <!-- Feedback + support -->
             <template v-else>
-              <div class="flex divide-x divide-border-subtle">
-                <!-- Left: Feedback -->
-                <div class="flex-1 px-6 py-5">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_0.95fr] divide-y md:divide-y-0 md:divide-x divide-border-subtle">
+                <div class="px-6 py-5">
                   <h4 class="text-sm font-semibold text-fg mb-1">意见反馈</h4>
                   <p class="text-xs text-fg-dim mb-3">遇到问题或有优化建议？请告诉我们</p>
                   <textarea
@@ -121,20 +126,8 @@ function close() {
                   </div>
                 </div>
 
-                <!-- Right: Sponsor -->
-                <div class="flex-1 px-6 py-5 bg-bg-base/30">
-                  <h4 class="text-sm font-semibold text-fg mb-1">感谢打赏</h4>
-                  <p class="text-xs text-fg-dim mb-4">ScriptPilot 的每一次运行都伴随着真实的成本：服务器部署、大模型 API 调用、网络传输、持续开发和维护。如果这个工具对您有帮助，您的支持将帮助我们持续提供更好的服务。</p>
-                  <div class="flex justify-center gap-5">
-                    <div class="text-center">
-                      <img src="/微信收款.jpg" class="w-32 h-auto rounded-lg border border-border-subtle" />
-                      <p class="text-[11px] text-fg-dim mt-1.5">微信支付</p>
-                    </div>
-                    <div class="text-center">
-                      <img src="/支付宝收款.jpg" class="w-32 h-auto rounded-lg border border-border-subtle" />
-                      <p class="text-[11px] text-fg-dim mt-1.5">支付宝</p>
-                    </div>
-                  </div>
+                <div class="px-6 py-5 bg-bg-base/35">
+                  <SupportPanel />
                 </div>
               </div>
             </template>
