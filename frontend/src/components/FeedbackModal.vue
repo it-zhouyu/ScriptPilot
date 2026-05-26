@@ -14,7 +14,7 @@ const done = ref(false)
 function onFileChange(e) {
   const files = Array.from(e.target.files || [])
   for (const file of files) {
-    if (images.value.length >= 5) break
+    if (images.value.length >= 3) break
     const reader = new FileReader()
     reader.onload = (ev) => {
       images.value.push({ name: file.name, data: ev.target.result, file })
@@ -63,10 +63,10 @@ function close() {
     <Transition name="fade">
       <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40" @click="close"></div>
-        <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+        <div class="relative w-full max-w-4xl min-h-[520px] max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-            <h3 class="text-base font-semibold text-fg">意见反馈</h3>
+            <h3 class="text-base font-semibold text-fg">帮ScriptPilot变得更好</h3>
             <button @click="close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-base transition-colors text-fg-dim">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -75,9 +75,9 @@ function close() {
           </div>
 
           <!-- Body -->
-          <div class="px-6 py-5">
+          <div class="flex-1 overflow-y-auto">
             <!-- Success state -->
-            <div v-if="done" class="text-center py-8">
+            <div v-if="done" class="text-center py-12">
               <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-green-50 flex items-center justify-center">
                 <svg class="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -87,33 +87,54 @@ function close() {
               <p class="text-xs text-fg-dim mt-1">我们会认真对待每一条建议</p>
             </div>
 
-            <!-- Form -->
+            <!-- Two column layout -->
             <template v-else>
-              <p class="text-xs text-fg-dim mb-3">遇到问题或有优化建议？请告诉我们，帮助 ScriptPilot 变得更好</p>
-              <textarea
-                v-model="text"
-                placeholder="请描述您遇到的问题或建议..."
-                class="w-full h-32 p-3 text-sm leading-relaxed border border-border-subtle rounded-xl resize-none focus:outline-none focus:border-accent/40 transition-colors text-fg placeholder:text-fg-dim/50"
-              ></textarea>
+              <div class="flex divide-x divide-border-subtle">
+                <!-- Left: Feedback -->
+                <div class="flex-1 px-6 py-5">
+                  <h4 class="text-sm font-semibold text-fg mb-1">意见反馈</h4>
+                  <p class="text-xs text-fg-dim mb-3">遇到问题或有优化建议？请告诉我们</p>
+                  <textarea
+                    v-model="text"
+                    placeholder="请描述您遇到的问题或建议..."
+                    class="w-full h-32 p-3 text-sm leading-relaxed border border-border-subtle rounded-xl resize-none focus:outline-none focus:border-accent/40 transition-colors text-fg placeholder:text-fg-dim/50"
+                  ></textarea>
 
-              <!-- Image upload -->
-              <div class="mt-3">
-                <div class="flex flex-wrap gap-2">
-                  <div v-for="(img, idx) in images" :key="idx" class="relative group w-20 h-20 rounded-lg overflow-hidden border border-border-subtle">
-                    <img :src="img.data" class="w-full h-full object-cover" />
-                    <button @click="removeImage(idx)" class="absolute top-0.5 right-0.5 w-5 h-5 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                  <div class="mt-3">
+                    <div class="flex flex-wrap gap-2">
+                      <div v-for="(img, idx) in images" :key="idx" class="relative group w-20 h-20 rounded-lg overflow-hidden border border-border-subtle">
+                        <img :src="img.data" class="w-full h-full object-cover" />
+                        <button @click="removeImage(idx)" class="absolute top-0.5 right-0.5 w-5 h-5 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <label v-if="images.length < 3" class="w-20 h-20 rounded-lg border-2 border-dashed border-border-subtle flex flex-col items-center justify-center cursor-pointer hover:border-accent/30 transition-colors">
+                        <svg class="w-5 h-5 text-fg-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span class="text-[10px] text-fg-dim mt-1">添加图片</span>
+                        <input type="file" accept="image/*" multiple class="hidden" @change="onFileChange" />
+                      </label>
+                    </div>
                   </div>
-                  <label v-if="images.length < 5" class="w-20 h-20 rounded-lg border-2 border-dashed border-border-subtle flex flex-col items-center justify-center cursor-pointer hover:border-accent/30 transition-colors">
-                    <svg class="w-5 h-5 text-fg-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span class="text-[10px] text-fg-dim mt-1">添加图片</span>
-                    <input type="file" accept="image/*" multiple class="hidden" @change="onFileChange" />
-                  </label>
+                </div>
+
+                <!-- Right: Sponsor -->
+                <div class="flex-1 px-6 py-5 bg-bg-base/30">
+                  <h4 class="text-sm font-semibold text-fg mb-1">感谢打赏</h4>
+                  <p class="text-xs text-fg-dim mb-4">ScriptPilot 的每一次运行都伴随着真实的成本：服务器部署、大模型 API 调用、网络传输、持续开发和维护。如果这个工具对您有帮助，您的支持将帮助我们持续提供更好的服务。</p>
+                  <div class="flex justify-center gap-5">
+                    <div class="text-center">
+                      <img src="/微信收款.jpg" class="w-32 h-auto rounded-lg border border-border-subtle" />
+                      <p class="text-[11px] text-fg-dim mt-1.5">微信支付</p>
+                    </div>
+                    <div class="text-center">
+                      <img src="/支付宝收款.jpg" class="w-32 h-auto rounded-lg border border-border-subtle" />
+                      <p class="text-[11px] text-fg-dim mt-1.5">支付宝</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
