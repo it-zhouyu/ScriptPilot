@@ -1,11 +1,13 @@
 import os
 import logging
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_deepseek import ChatDeepSeek
 from langchain_openai import ChatOpenAI
 
-load_dotenv()
+_project_root = Path(__file__).resolve().parent.parent
+load_dotenv(_project_root / ".env")
 
 logger = logging.getLogger("scriptpilot")
 

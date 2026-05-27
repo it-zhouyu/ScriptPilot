@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+dist
+__pycache__
+*.pyc
+.env
+.playwright-mcp
+.claude
+.agents
+.codex
+memory
+*.egg-info
