@@ -66,7 +66,11 @@ def _build_messages(message: str, history: list) -> list:
         if role == "user":
             messages.append({"role": "user", "content": content})
         elif role == "assistant":
-            messages.append({"role": "assistant", "content": content})
+            amsg = {"role": "assistant", "content": content}
+            reasoning = msg.get("reasoning") or msg.get("reasoning_content")
+            if reasoning:
+                amsg["reasoning_content"] = reasoning
+            messages.append(amsg)
     messages.append({"role": "user", "content": message})
     return messages
 
@@ -92,8 +96,6 @@ async def stream_agent_chat(message: str, history: list):
 
         async for msg in stream.messages:
             queue = asyncio.Queue()
-            _emitted_tools = set()
-            _tool_accum = {}
             _has_tool_calls = False
             _text_buffer = []
 
@@ -108,24 +110,11 @@ async def stream_agent_chat(message: str, history: list):
                         await queue.put(("token", t))
 
             async def collect_tool_calls():
+                nonlocal _has_tool_calls
                 async for chunk in msg.tool_calls:
-                    idx = chunk.get("index", 0)
-                    name = chunk.get("name")
-                    args_part = chunk.get("args", "")
-                    if idx not in _tool_accum:
-                        _tool_accum[idx] = {"name": "", "args": ""}
-                    if name:
-                        _tool_accum[idx]["name"] = name
-                    if args_part:
-                        _tool_accum[idx]["args"] += args_part
-                    if _tool_accum[idx]["name"] and idx not in _emitted_tools:
-                        _emitted_tools.add(idx)
-                        args_str = _tool_accum[idx]["args"]
-                        try:
-                            args = json.loads(args_str) if args_str else {}
-                        except json.JSONDecodeError:
-                            args = {}
-                        await queue.put(("tool", {"name": _tool_accum[idx]["name"], "args": args}))
+                    if chunk.get("name"):
+                        _has_tool_calls = True
+                        await queue.put(("_tool_detected", None))
 
             async def collect_all():
                 await asyncio.gather(collect_reasoning(), collect_text(), collect_tool_calls())
@@ -138,13 +127,8 @@ async def stream_agent_chat(message: str, history: list):
                 if item is None:
                     break
                 event_type, delta = item
-                if event_type == "tool":
-                    _has_tool_calls = True
+                if event_type == "_tool_detected":
                     _text_buffer.clear()
-                    yield {
-                        "event": "tool",
-                        "data": json.dumps(delta, ensure_ascii=False),
-                    }
                 elif event_type == "reasoning":
                     yield {
                         "event": "reasoning",
