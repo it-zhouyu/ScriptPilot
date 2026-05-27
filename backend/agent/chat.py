@@ -76,11 +76,10 @@ def _build_messages(message: str, history: list) -> list:
 
 
 async def stream_agent_chat(message: str, history: list):
-    """Stream agent response as SSE events using v3 event streaming.
+    """Stream agent response as SSE events.
 
-    Yields SSE event dicts with three event types:
+    Yields SSE event dicts:
     - {"event": "reasoning", "data": {"token": "..."}} — thinking process
-    - {"event": "tool", "data": {"name": "...", "args": {...}}} — tool call
     - {"event": "token", "data": {"token": "..."}} — response text
     """
     agent = get_agent()
@@ -88,7 +87,7 @@ async def stream_agent_chat(message: str, history: list):
 
     try:
         input_data = {"messages": messages}
-        skills = _load_skills()
+        skills = _load_skills() or {}
         if skills:
             input_data["files"] = skills
 

@@ -1,7 +1,7 @@
 <script setup>
-import { ref, nextTick, watch, onMounted } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { ref, nextTick, watch, onMounted, computed } from 'vue'
+import { renderMarkdown } from '../utils/markdown.js'
+import { fetchSSE } from '../api/sse.js'
 
 const emit = defineEmits(['back'])
 const props = defineProps({
@@ -13,6 +13,13 @@ const inputText = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref(null)
 const expandedReasoning = ref(new Set())
+
+const renderedMessages = computed(() =>
+  messages.value.map(msg => ({
+    ...msg,
+    renderedContent: renderMarkdown(msg.content),
+  }))
+)
 
 onMounted(() => {
   if (props.initialMessage) {
@@ -26,12 +33,6 @@ function toggleReasoning(index) {
   if (s.has(index)) s.delete(index)
   else s.add(index)
   expandedReasoning.value = s
-}
-
-function renderMarkdown(text) {
-  if (!text) return ''
-  const html = marked.parse(text, { breaks: true })
-  return DOMPurify.sanitize(html)
 }
 
 async function scrollToBottom() {
@@ -57,48 +58,23 @@ async function sendMessage() {
   messages.value.push({ role: 'assistant', content: '', reasoning: '' })
   const assistantMsg = messages.value[messages.value.length - 1]
 
-  try {
-    const response = await fetch('/api/agent/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, history: messages.value.slice(0, -1) }),
-    })
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let currentEvent = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (currentEvent === 'reasoning' && data.token) {
-              assistantMsg.reasoning += data.token
-            } else if (currentEvent === 'token' && data.token) {
-              assistantMsg.content += data.token
-            }
-          } catch { /* skip malformed */ }
-        }
-      }
-    }
-  } catch (err) {
-    assistantMsg.content = assistantMsg.content || '抱歉，连接出现问题，请稍后再试。'
-  } finally {
-    isLoading.value = false
-  }
+  await fetchSSE('/api/agent/chat', {
+    message: text,
+    history: messages.value.slice(0, -1),
+  }, {
+    onReasoning(data) {
+      assistantMsg.reasoning += data.token || ''
+    },
+    onToken(data) {
+      assistantMsg.content += data.token || ''
+    },
+    onError() {
+      assistantMsg.content = assistantMsg.content || '抱歉，连接出现问题，请稍后再试。'
+    },
+    onDone() {
+      isLoading.value = false
+    },
+  })
 }
 
 function handleKeydown(e) {
@@ -166,7 +142,7 @@ function autoResize(e) {
       </div>
 
       <!-- Message list -->
-      <template v-for="(msg, i) in messages" :key="i">
+      <template v-for="(msg, i) in renderedMessages" :key="i">
         <!-- User message -->
         <div v-if="msg.role === 'user'" class="flex justify-end">
           <div class="max-w-[70%] px-4 py-3 bg-accent text-white text-sm rounded-2xl rounded-br-md leading-relaxed whitespace-pre-wrap">
@@ -201,7 +177,7 @@ function autoResize(e) {
             </div>
             <!-- Content block -->
             <div v-if="msg.content || !msg.reasoning" class="px-4 py-3 bg-white text-sm rounded-2xl rounded-bl-md border border-border-subtle leading-relaxed">
-              <div v-if="msg.content" class="prose-content" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.content" class="prose-content" v-html="msg.renderedContent"></div>
               <div v-else class="flex items-center gap-1.5 py-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce" style="animation-delay: 0ms"></span>
                 <span class="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce" style="animation-delay: 150ms"></span>

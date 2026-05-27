@@ -168,7 +168,6 @@ watch([() => clarifyContent.value.length, () => styleContent.value.length, () =>
   if (activeView.value === 'direction' || activeView.value === 'style') scrollToBottom()
 })
 
-// ── Handlers ───────────────────────────────────────────
 function fetchStyleOptions() {
   styleThinking.value = ''
   styleContent.value = ''

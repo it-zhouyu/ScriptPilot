@@ -13,7 +13,7 @@
  * @param {(data: object) => void} handlers.onResults - Research results received
  * @param {(error: Error) => void} handlers.onError - Error occurred
  */
-export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOption, onOptions, onResults, onPaused, onDone, onError }) {
+export async function fetchSSE(url, body, { onStage, onToken, onThinking, onReasoning, onOption, onOptions, onResults, onPaused, onDone, onError }) {
   let doneCalled = false
 
   function dispatchEvent(currentEvent, line) {
@@ -23,6 +23,7 @@ export async function fetchSSE(url, body, { onStage, onToken, onThinking, onOpti
     if (currentEvent === 'stage' && onStage) onStage(data)
     else if (currentEvent === 'token' && onToken) onToken(data)
     else if (currentEvent === 'thinking' && onThinking) onThinking(data)
+    else if (currentEvent === 'reasoning' && onReasoning) onReasoning(data)
     else if (currentEvent === 'option' && onOption) onOption(data)
     else if (currentEvent === 'options' && onOptions) onOptions(data)
     else if (currentEvent === 'results' && onResults) onResults(data)

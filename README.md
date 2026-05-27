@@ -1,107 +1,129 @@
 # ScriptPilot
 
-AI 口播稿生成器。输入主题，自动完成资料收集、大纲生成、内容撰写、口播稿生成，全程实时流式输出。
+AI 短视频口播稿生成器。支持两种模式：传统模式按步骤逐步生成，Agent 模式通过对话一键完成。
 
 ## 技术栈
 
-- **后端**: Python + FastAPI + LangGraph + LangChain + DeepSeek API
+- **后端**: Python + FastAPI + LangChain + DeepSeek API
 - **前端**: Vue 3 + Vite + Tailwind CSS
+- **Agent**: deepagents 框架 + Skills 系统
 - **通信**: SSE (Server-Sent Events) 实时流式推送
+- **部署**: Docker 多阶段构建
 
-## 工作流程
+## 两种模式
+
+### 传统模式
+
+手动逐步操作，每步可查看、编辑、确认后再继续：
 
 ```
-用户输入主题 → 资料收集 → 大纲生成 → 内容撰写 → 口播稿生成
+选题策划 → 风格选择 → 讲解思路 → 口播稿
 ```
 
-4 个阶段通过 LangGraph 管道顺序执行，每个阶段的结果实时流式展示在前端。支持推理模型的思考过程展示。
+### Agent 模式
+
+与 AI Agent 对话，自动按流程完成创作。Agent 内部严格遵循流程规范，每步暂停等待确认：
+
+```
+用户输入主题 → Agent 自动选题策划 → 等待选择 → 风格推荐 → 等待确认 → 讲解思路 → 等待确认 → 生成口播稿
+```
 
 ## 快速开始
 
-### 1. 环境准备
+### Docker 部署（推荐）
 
 ```bash
-# 创建并激活虚拟环境
-python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
+# 创建 .env 配置文件
+cp .env.example .env
+# 编辑 .env 填入 API Key
 
+# 构建并运行
+docker build -t scriptpilot .
+docker run -d --name scriptpilot -p 8000:8000 --env-file .env scriptpilot
+```
+
+访问 http://localhost:8000
+
+### 本地开发
+
+```bash
 # 安装后端依赖
+python -m venv .venv
+source .venv/bin/activate
 pip install -r backend/requirements.txt
 
 # 安装前端依赖
 cd frontend && npm install && cd ..
-```
 
-### 2. 配置 API Key
+# 配置 .env（填入 API Key）
 
-编辑 `backend/.env`，填入 DeepSeek API Key：
-
-```text
-DEEPSEEK_API_KEY=sk-your-api-key
-```
-
-### 3. 启动服务
-
-```bash
-# 启动后端（项目根目录）
-.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
+# 启动后端
+uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
 
 # 启动前端（新终端）
 cd frontend && npm run dev
 ```
 
-### 4. 使用
+## 环境变量
 
-打开浏览器访问 http://localhost:5173，输入主题，点击"开始生成"。
+在项目根目录 `.env` 文件中配置：
+
+```text
+DEEPSEEK_API_KEY=your_deepseek_api_key
+ZHIPU_API_KEY=your_zhipu_api_key
+TAVILY_API_KEY=your_tavily_api_key
+RESEARCH_ENABLED=false
+CONTENT_ENABLED=false
+SMTP_HOST=
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASSWORD=
+```
 
 ## 项目结构
 
 ```
 ScriptPilot/
+├── Dockerfile                  # Docker 多阶段构建
+├── .dockerignore
+├── .env                        # 环境变量配置（已 gitignore）
 ├── backend/
-│   ├── app.py                 # FastAPI 入口，SSE 端点
-│   ├── config.py              # LLM 配置（模型、API Key）
-│   ├── graph/
-│   │   ├── state.py           # PipelineState 状态定义
-│   │   └── pipeline.py        # LangGraph 工作流 + 流式编排
-│   ├── nodes/
-│   │   ├── research.py        # 资料收集节点
-│   │   ├── outline.py         # 大纲生成节点
-│   │   ├── content.py         # 内容撰写节点
-│   │   ├── script.py          # 口播稿生成节点
-│   │   └── utils.py           # 流式输出工具（思考过程提取）
-│   ├── prompts/               # 各阶段 Prompt 模板
-│   └── .env                   # API Key 配置
-├── frontend/                  # Vue 3 + Vite 项目
+│   ├── app.py                  # FastAPI 入口，所有 API 端点
+│   ├── config.py               # LLM 配置 + DeepSeek patch
+│   ├── agent/                  # AI Agent 模式
+│   │   ├── Agents.md           # Agent 系统提示词（流程规范）
+│   │   ├── chat.py             # Agent 对话 + SSE 流式输出
+│   │   └── skills/             # Agent 技能文件
+│   │       ├── clarify/SKILL.md
+│   │       ├── style/SKILL.md
+│   │       ├── outline/SKILL.md
+│   │       └── script/SKILL.md
+│   ├── graph/                  # 传统模式工作流
+│   ├── nodes/                  # 传统模式各阶段节点
+│   ├── prompts/                # Prompt 模板
+│   └── utils/                  # 工具函数
+├── frontend/
 │   └── src/
-│       ├── App.vue            # 主页面
-│       ├── components/
-│       │   ├── TopicInput.vue      # 主题输入组件
-│       │   └── ContentPanel.vue    # 内容展示（含思考过程）
-│       └── api/
-│           └── sse.js              # SSE 客户端
-└── .env.example               # 环境变量模板
-```
-
-## 切换模型
-
-编辑 `backend/config.py` 中的 `model` 参数：
-
-```python
-def get_llm():
-    return ChatOpenAI(
-        model="deepseek-v4-flash",  # 修改此处
-        base_url="https://api.deepseek.com",
-        ...
-    )
+│       ├── App.vue             # 主页面（模式切换）
+│       └── components/
+│           ├── TopicInput.vue       # 首页（输入主题 + Agent 开关）
+│           ├── AgentChat.vue        # Agent 对话界面
+│           ├── MarkdownSplitPanel.vue
+│           ├── ThinkingIndicator.vue
+│           └── FeedbackModal.vue
+└── tests/
 ```
 
 ## API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/generate` | SSE 流式生成，body: `{"topic": "..."}` |
-| `GET` | `/api/health` | 健康检查 |
+| `POST` | `/api/clarify` | 选题策划（SSE） |
+| `POST` | `/api/style` | 风格推荐（SSE） |
+| `POST` | `/api/generate` | 生成阶段（SSE） |
+| `POST` | `/api/agent/chat` | Agent 对话（SSE） |
+| `POST` | `/api/feedback` | 用户反馈 |
+| `GET` | `/api/config` | 功能开关配置 |
 
 ## License
 
