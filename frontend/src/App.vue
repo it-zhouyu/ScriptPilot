@@ -11,6 +11,17 @@ import DOMPurify from 'dompurify'
 
 const phase = ref('input')
 const appMode = ref('traditional')
+const agentInitialMessage = ref('')
+
+function handleSwitchMode(mode, topic) {
+  appMode.value = mode
+  if (topic) agentInitialMessage.value = topic
+}
+
+function handleAgentBack() {
+  appMode.value = 'traditional'
+  agentInitialMessage.value = ''
+}
 
 const topic = ref('')
 const analyzeThinking = ref('')
@@ -646,12 +657,12 @@ async function copyAsSubtitle() {
     <!-- ═══ Main Content ═══ -->
     <!-- Phase: Initial Input -->
     <main v-if="phase === 'input' && appMode === 'traditional'" class="flex-1">
-      <TopicInput @submit="handleTopicSubmit" @switch-mode="appMode = $event" />
+      <TopicInput @submit="handleTopicSubmit" @switch-mode="handleSwitchMode" />
     </main>
 
     <!-- Agent Mode -->
     <main v-else-if="phase === 'input' && appMode === 'agent'" class="flex-1">
-      <AgentChat @back="appMode = 'traditional'" />
+      <AgentChat @back="handleAgentBack" :initial-message="agentInitialMessage" />
     </main>
 
     <!-- Phase: Sidebar + Content -->

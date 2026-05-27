@@ -1,15 +1,25 @@
 <script setup>
-import { ref, nextTick, watch } from 'vue'
+import { ref, nextTick, watch, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
 const emit = defineEmits(['back'])
+const props = defineProps({
+  initialMessage: { type: String, default: '' },
+})
 
 const messages = ref([])
 const inputText = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref(null)
 const expandedReasoning = ref(new Set())
+
+onMounted(() => {
+  if (props.initialMessage) {
+    inputText.value = props.initialMessage
+    sendMessage()
+  }
+})
 
 function toggleReasoning(index) {
   const s = new Set(expandedReasoning.value)
@@ -100,8 +110,10 @@ function handleKeydown(e) {
 
 function autoResize(e) {
   const el = e.target
+  el.style.overflowY = 'hidden'
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+  if (el.scrollHeight > 120) el.style.overflowY = 'auto'
 }
 </script>
 
@@ -203,18 +215,16 @@ function autoResize(e) {
 
     <!-- Input area -->
     <div class="flex-shrink-0 px-6 py-4 border-t border-border-subtle bg-white">
-      <div class="flex items-end gap-3 max-w-4xl mx-auto">
-        <div class="flex-1 relative">
-          <textarea
-            v-model="inputText"
-            @keydown="handleKeydown"
-            placeholder="输入消息，与 AI Agent 对话..."
-            rows="1"
-            class="w-full bg-bg-base text-fg placeholder-fg-dim px-4 py-3 text-sm rounded-xl border border-border-subtle focus:border-accent/40 focus:ring-2 focus:ring-accent/10 resize-none focus:outline-none transition-all"
-            style="max-height: 120px"
-            @input="autoResize"
-          ></textarea>
-        </div>
+      <div class="flex items-center gap-3 max-w-4xl mx-auto">
+        <textarea
+          v-model="inputText"
+          @keydown="handleKeydown"
+          placeholder="输入消息，与 AI Agent 对话..."
+          rows="1"
+          class="flex-1 bg-bg-base text-fg placeholder-fg-dim px-4 py-3 text-sm rounded-xl border border-border-subtle focus:border-accent/40 focus:ring-2 focus:ring-accent/10 resize-none focus:outline-none transition-all"
+          style="max-height: 120px"
+          @input="autoResize"
+        ></textarea>
         <button
           @click="sendMessage"
           :disabled="!inputText.trim() || isLoading"

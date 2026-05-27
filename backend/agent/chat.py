@@ -97,7 +97,6 @@ async def stream_agent_chat(message: str, history: list):
         async for msg in stream.messages:
             queue = asyncio.Queue()
             _has_tool_calls = False
-            _text_buffer = []
 
             async def collect_reasoning():
                 async for r in msg.reasoning:
@@ -114,7 +113,6 @@ async def stream_agent_chat(message: str, history: list):
                 async for chunk in msg.tool_calls:
                     if chunk.get("name"):
                         _has_tool_calls = True
-                        await queue.put(("_tool_detected", None))
 
             async def collect_all():
                 await asyncio.gather(collect_reasoning(), collect_text(), collect_tool_calls())
@@ -127,9 +125,7 @@ async def stream_agent_chat(message: str, history: list):
                 if item is None:
                     break
                 event_type, delta = item
-                if event_type == "_tool_detected":
-                    _text_buffer.clear()
-                elif event_type == "reasoning":
+                if event_type == "reasoning":
                     yield {
                         "event": "reasoning",
                         "data": json.dumps({"token": delta}, ensure_ascii=False),
@@ -137,20 +133,9 @@ async def stream_agent_chat(message: str, history: list):
                 elif event_type == "token":
                     if _has_tool_calls:
                         continue
-                    _text_buffer.append(delta)
-                    if sum(len(t) for t in _text_buffer) > 50:
-                        for t in _text_buffer:
-                            yield {
-                                "event": "token",
-                                "data": json.dumps({"token": t}, ensure_ascii=False),
-                            }
-                        _text_buffer.clear()
-
-            if not _has_tool_calls and _text_buffer:
-                for t in _text_buffer:
                     yield {
                         "event": "token",
-                        "data": json.dumps({"token": t}, ensure_ascii=False),
+                        "data": json.dumps({"token": delta}, ensure_ascii=False),
                     }
 
             await task
