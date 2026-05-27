@@ -5,3 +5,5 @@ langchain-core>=0.3.45
 python-dotenv==1.0.1
 sse-starlette==2.2.1
 tavily-python==0.7.3
+deepagents>=0.6.0
+langchain-openai>=0.3.0

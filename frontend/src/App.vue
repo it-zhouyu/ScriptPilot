@@ -4,11 +4,13 @@ import TopicInput from './components/TopicInput.vue'
 import MarkdownSplitPanel from './components/MarkdownSplitPanel.vue'
 import ThinkingIndicator from './components/ThinkingIndicator.vue'
 import FeedbackModal from './components/FeedbackModal.vue'
+import AgentChat from './components/AgentChat.vue'
 import { fetchSSE } from './api/sse.js'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
 const phase = ref('input')
+const appMode = ref('traditional')
 
 const topic = ref('')
 const analyzeThinking = ref('')
@@ -643,8 +645,13 @@ async function copyAsSubtitle() {
 
     <!-- ═══ Main Content ═══ -->
     <!-- Phase: Initial Input -->
-    <main v-if="phase === 'input'" class="flex-1">
-      <TopicInput @submit="handleTopicSubmit" />
+    <main v-if="phase === 'input' && appMode === 'traditional'" class="flex-1">
+      <TopicInput @submit="handleTopicSubmit" @switch-mode="appMode = $event" />
+    </main>
+
+    <!-- Agent Mode -->
+    <main v-else-if="phase === 'input' && appMode === 'agent'" class="flex-1">
+      <AgentChat @back="appMode = 'traditional'" />
     </main>
 
     <!-- Phase: Sidebar + Content -->

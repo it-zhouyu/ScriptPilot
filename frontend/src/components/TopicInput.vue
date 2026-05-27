@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
 
-const emit = defineEmits(['submit'])
+const emit = defineEmits(['submit', 'switch-mode'])
 
 const topic = ref('')
 const isFocused = ref(false)
 const textareaRef = ref(null)
+const isAgentMode = ref(false)
 const productFlowHint = '选方向 · 定风格 · 生成可直接录制的口播稿'
 const examples = [
   '普通人如何开始做短视频',
@@ -23,6 +24,13 @@ function useExample(text) {
   topic.value = text
   textareaRef.value?.focus()
 }
+
+function toggleMode() {
+  isAgentMode.value = !isAgentMode.value
+  if (isAgentMode.value) {
+    emit('switch-mode', 'agent')
+  }
+}
 </script>
 
 <template>
@@ -30,6 +38,33 @@ function useExample(text) {
     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/25 to-transparent"></div>
 
     <div class="w-full max-w-3xl text-center relative z-10">
+      <!-- Mode Toggle -->
+      <div class="flex items-center justify-center mb-8">
+        <div class="inline-flex items-center bg-white/80 rounded-xl p-1 shadow-[0_0_0_1px_rgba(44,32,20,0.06),0_2px_8px_rgba(44,32,20,0.04)]">
+          <button
+            @click="isAgentMode && toggleMode()"
+            :class="!isAgentMode
+              ? 'bg-accent text-white shadow-sm'
+              : 'text-fg-secondary hover:text-fg'"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+          >
+            传统模式
+          </button>
+          <button
+            @click="!isAgentMode && toggleMode()"
+            :class="isAgentMode
+              ? 'bg-accent text-white shadow-sm'
+              : 'text-fg-secondary hover:text-fg'"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-1.5"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+            </svg>
+            AI Agent
+          </button>
+        </div>
+      </div>
+
       <!-- Brand -->
       <div class="mb-10">
         <h1 class="text-5xl font-bold tracking-tight text-fg mb-4 font-display">

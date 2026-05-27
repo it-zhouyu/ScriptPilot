@@ -166,6 +166,19 @@ async def script(request: Request):
     return _sse(run_stage_streaming("script", state))
 
 
+@app.post("/api/agent/chat")
+async def agent_chat(request: Request):
+    body = await request.json()
+    message = body.get("message", "").strip()
+    if not message:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    history = body.get("history", [])
+
+    from backend.agent.chat import stream_agent_chat
+    return EventSourceResponse(stream_agent_chat(message, history))
+
+
 @app.post("/api/feedback")
 async def feedback(
     text: str = Form(""),
