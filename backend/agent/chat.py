@@ -12,7 +12,7 @@ logger = logging.getLogger("scriptpilot.agent")
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 
-SYSTEM_PROMPT = (Path(__file__).parent / "AGENTS.md").read_text(encoding="utf-8")
+SYSTEM_PROMPT = (Path(__file__).parent / "Agents.md").read_text(encoding="utf-8")
 
 
 _agent = None
