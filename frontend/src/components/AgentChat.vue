@@ -44,7 +44,7 @@ async function sendMessage() {
   inputText.value = ''
   isLoading.value = true
 
-  messages.value.push({ role: 'assistant', content: '', reasoning: '' })
+  messages.value.push({ role: 'assistant', content: '', reasoning: '', tools: [] })
   const assistantMsg = messages.value[messages.value.length - 1]
 
   try {
@@ -77,6 +77,8 @@ async function sendMessage() {
             const data = JSON.parse(line.slice(6))
             if (currentEvent === 'reasoning' && data.token) {
               assistantMsg.reasoning += data.token
+            } else if (currentEvent === 'tool') {
+              assistantMsg.tools = [...(assistantMsg.tools || []), { name: data.name, args: data.args }]
             } else if (currentEvent === 'token' && data.token) {
               assistantMsg.content += data.token
             }
@@ -89,6 +91,20 @@ async function sendMessage() {
   } finally {
     isLoading.value = false
   }
+}
+
+const TOOL_NAMES = { read_file: '读取文件', write_file: '写入文件', edit_file: '编辑文件', ls: '列出目录', grep: '搜索内容', glob: '查找文件' }
+
+function toolLabel(tool) {
+  const name = TOOL_NAMES[tool.name] || tool.name
+  const path = tool.args?.file_path || ''
+  const match = path.match(/\/skills\/([^/]+)\/SKILL\.md$/)
+  if (match) {
+    const skillNames = { clarify: '选题策划', style: '风格选择', outline: '讲解思路', content: '撰写文章', script: '口播稿' }
+    return `${name}：${skillNames[match[1]] || match[1]}`
+  }
+  if (path) return `${name}：${path.split('/').pop()}`
+  return name
 }
 
 function handleKeydown(e) {
@@ -186,6 +202,19 @@ function autoResize(e) {
                 <span>{{ msg.content ? '思考过程' : '思考中...' }}</span>
               </button>
               <p v-if="expandedReasoning.has(i)" class="text-amber-800/70 whitespace-pre-wrap mt-1.5">{{ msg.reasoning }}</p>
+            </div>
+            <!-- Tool calls block -->
+            <div v-if="msg.tools && msg.tools.length" class="space-y-1.5">
+              <div v-for="(tool, ti) in msg.tools" :key="ti" class="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200/60 rounded-xl text-xs">
+                <svg v-if="!msg.content" class="w-3.5 h-3.5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <svg v-else class="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-blue-700 font-medium">{{ toolLabel(tool) }}</span>
+              </div>
             </div>
             <!-- Content block -->
             <div v-if="msg.content || !msg.reasoning" class="px-4 py-3 bg-white text-sm rounded-2xl rounded-bl-md border border-border-subtle leading-relaxed">

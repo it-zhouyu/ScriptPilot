@@ -12,22 +12,8 @@ logger = logging.getLogger("scriptpilot.agent")
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 
-AGENTS_MD = (Path(__file__).parent / "Agents.md").read_text(encoding="utf-8")
+SYSTEM_PROMPT = (Path(__file__).parent / "AGENTS.md").read_text(encoding="utf-8")
 
-SYSTEM_PROMPT = f"""你是 ScriptPilot Agent，一个专业的短视频创作助手。
-
-{AGENTS_MD}
-
-## 工作原则
-
-- 回复使用中文
-- 回复要简洁实用，避免冗长的客套话
-- 每次回复聚焦一个明确的主题
-- 如果用户的需求不清晰，最多追问 1-2 个关键问题
-- 对用户回复时，以专业助手的身份直接给出成果，不要提及内部的工作机制（如 skill、文件读取、工具调用等）
-- 优先直接给出成果，不要反复确认细节
-- 每一步执行前，先读取对应的 skill 获取详细的模板和规范
-"""
 
 _agent = None
 _skills_files = None
@@ -88,8 +74,9 @@ def _build_messages(message: str, history: list) -> list:
 async def stream_agent_chat(message: str, history: list):
     """Stream agent response as SSE events using v3 event streaming.
 
-    Yields SSE event dicts with two event types:
+    Yields SSE event dicts with three event types:
     - {"event": "reasoning", "data": {"token": "..."}} — thinking process
+    - {"event": "tool", "data": {"name": "...", "args": {...}}} — tool call
     - {"event": "token", "data": {"token": "..."}} — response text
     """
     agent = get_agent()
@@ -105,6 +92,10 @@ async def stream_agent_chat(message: str, history: list):
 
         async for msg in stream.messages:
             queue = asyncio.Queue()
+            _emitted_tools = set()
+            _tool_accum = {}
+            _has_tool_calls = False
+            _text_buffer = []
 
             async def collect_reasoning():
                 async for r in msg.reasoning:
@@ -116,8 +107,28 @@ async def stream_agent_chat(message: str, history: list):
                     if t:
                         await queue.put(("token", t))
 
+            async def collect_tool_calls():
+                async for chunk in msg.tool_calls:
+                    idx = chunk.get("index", 0)
+                    name = chunk.get("name")
+                    args_part = chunk.get("args", "")
+                    if idx not in _tool_accum:
+                        _tool_accum[idx] = {"name": "", "args": ""}
+                    if name:
+                        _tool_accum[idx]["name"] = name
+                    if args_part:
+                        _tool_accum[idx]["args"] += args_part
+                    if _tool_accum[idx]["name"] and idx not in _emitted_tools:
+                        _emitted_tools.add(idx)
+                        args_str = _tool_accum[idx]["args"]
+                        try:
+                            args = json.loads(args_str) if args_str else {}
+                        except json.JSONDecodeError:
+                            args = {}
+                        await queue.put(("tool", {"name": _tool_accum[idx]["name"], "args": args}))
+
             async def collect_all():
-                await asyncio.gather(collect_reasoning(), collect_text())
+                await asyncio.gather(collect_reasoning(), collect_text(), collect_tool_calls())
                 await queue.put(None)
 
             task = asyncio.create_task(collect_all())
@@ -127,10 +138,36 @@ async def stream_agent_chat(message: str, history: list):
                 if item is None:
                     break
                 event_type, delta = item
-                yield {
-                    "event": event_type,
-                    "data": json.dumps({"token": delta}, ensure_ascii=False),
-                }
+                if event_type == "tool":
+                    _has_tool_calls = True
+                    _text_buffer.clear()
+                    yield {
+                        "event": "tool",
+                        "data": json.dumps(delta, ensure_ascii=False),
+                    }
+                elif event_type == "reasoning":
+                    yield {
+                        "event": "reasoning",
+                        "data": json.dumps({"token": delta}, ensure_ascii=False),
+                    }
+                elif event_type == "token":
+                    if _has_tool_calls:
+                        continue
+                    _text_buffer.append(delta)
+                    if sum(len(t) for t in _text_buffer) > 50:
+                        for t in _text_buffer:
+                            yield {
+                                "event": "token",
+                                "data": json.dumps({"token": t}, ensure_ascii=False),
+                            }
+                        _text_buffer.clear()
+
+            if not _has_tool_calls and _text_buffer:
+                for t in _text_buffer:
+                    yield {
+                        "event": "token",
+                        "data": json.dumps({"token": t}, ensure_ascii=False),
+                    }
 
             await task
 
